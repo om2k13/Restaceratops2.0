@@ -1,0 +1,43 @@
+{
+  "name": "restaceratops-agent",
+  "description": "AI-powered API testing agent",
+  "repository": "https://github.com/your-org/restaceratops",
+  "keywords": ["api", "testing", "ai", "automation"],
+  "env": {
+    "BASE_URL": {
+      "description": "Base URL for your API endpoints",
+      "value": "https://your-api.com"
+    },
+    "BEARER_TOKEN": {
+      "description": "Authentication token for your API",
+      "required": false
+    },
+    "PUSHGATEWAY_URL": {
+      "description": "Prometheus push gateway URL",
+      "required": false
+    },
+    "PYTHON_VERSION": {
+      "description": "Python version to use",
+      "value": "3.12.0"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [
+    {
+      "plan": "scheduler:standard"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "poetry run python -m agent.runner --tests tests"
+  }
+} 

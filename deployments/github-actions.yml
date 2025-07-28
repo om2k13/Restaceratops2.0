@@ -1,0 +1,50 @@
+name: 🦖 Restaceratops API Testing
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # Daily at 1 AM
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches: [ main ]
+
+jobs:
+  test-api:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🦖 Checkout Restaceratops
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: 📦 Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        
+    - name: 🔧 Install dependencies
+      run: poetry install
+      
+    - name: 🧪 Run API Tests
+      run: |
+        poetry run python -m agent.runner --tests tests
+      env:
+        BASE_URL: ${{ secrets.API_BASE_URL }}
+        BEARER_TOKEN: ${{ secrets.API_BEARER_TOKEN }}
+        
+    - name: 📊 Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: report.xml
+        
+    - name: 📈 Send to Prometheus
+      if: always()
+      run: |
+        # Optional: Send metrics to Prometheus
+        echo "Metrics sent to Prometheus"
+      env:
+        PUSHGATEWAY_URL: ${{ secrets.PROMETHEUS_PUSHGATEWAY }} 

@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Restaceratops API Testing Agent - Lambda Deployment'
+
+Parameters:
+  ApiBaseUrl:
+    Type: String
+    Default: 'https://your-api.com'
+    Description: 'Base URL for your API endpoints'
+  
+  BearerToken:
+    Type: String
+    NoEcho: true
+    Description: 'Authentication token for your API'
+
+Resources:
+  RestaceratopsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: restaceratops-agent
+      Runtime: python3.12
+      Handler: agent.runner
+      Code:
+        ZipFile: |
+          import os
+          import sys
+          import json
+          import asyncio
+          from agent.runner import run_suite
+          
+          def lambda_handler(event, context):
+              try:
+                  # Set environment variables
+                  os.environ['BASE_URL'] = os.environ.get('API_BASE_URL', 'https://your-api.com')
+                  os.environ['BEARER_TOKEN'] = os.environ.get('API_BEARER_TOKEN', '')
+                  
+                  # Run tests
+                  exit_code = asyncio.run(run_suite('tests', max_in_flight=5))
+                  
+                  return {
+                      'statusCode': 200 if exit_code == 0 else 500,
+                      'body': json.dumps({
+                          'message': 'Restaceratops tests completed',
+                          'exit_code': exit_code
+                      })
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({
+                          'error': str(e)
+                      })
+                  }
+      
+      Environment:
+        Variables:
+          API_BASE_URL: !Ref ApiBaseUrl
+          API_BEARER_TOKEN: !Ref BearerToken
+      
+      Timeout: 300
+      MemorySize: 512
+      Role: !GetAtt RestaceratopsRole.Arn
+
+  RestaceratopsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  RestaceratopsSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: restaceratops-daily
+      Description: 'Daily Restaceratops API testing'
+      ScheduleExpression: 'cron(0 1 * * ? *)'  # Daily at 1 AM UTC
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt RestaceratopsFunction.Arn
+          Id: RestaceratopsTarget
+
+  RestaceratopsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RestaceratopsFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RestaceratopsSchedule.Arn
+
+Outputs:
+  FunctionArn:
+    Description: 'Restaceratops Lambda Function ARN'
+    Value: !GetAtt RestaceratopsFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionArn'
+  
+  FunctionName:
+    Description: 'Restaceratops Lambda Function Name'
+    Value: !Ref RestaceratopsFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-FunctionName' 
