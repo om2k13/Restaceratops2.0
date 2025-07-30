@@ -15,20 +15,16 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, AIMessage, SystemMessage
 from langchain.memory import ConversationBufferWindowMemory
 
-# Import free AI model support
-try:
-    from langchain_community.llms import Ollama
-    from langchain_community.chat_models import ChatOllama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
+# Import free AI model support (OpenRouter handled separately)
+OLLAMA_AVAILABLE = False
+HUGGINGFACE_AVAILABLE = False
 
+# Import Gemini AI support
 try:
-    from langchain_community.llms import HuggingFaceEndpoint
-    from langchain_community.chat_models import ChatHuggingFace
-    HUGGINGFACE_AVAILABLE = True
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    GEMINI_AVAILABLE = True
 except ImportError:
-    HUGGINGFACE_AVAILABLE = False
+    GEMINI_AVAILABLE = False
 
 from backend.core.models.vector_store import get_vector_store, setup_vector_store
 from backend.core.agents.rag_system import get_rag_system
@@ -47,73 +43,42 @@ class MultiProviderAI:
         self._initialize_providers()
     
     def _initialize_providers(self):
-        """Initialize all available AI providers in order of preference."""
+        """Initialize AI providers: Gemini (Primary) and OpenRouter (Backup) - Free models only."""
         
-        # 1. DeepSeek (Primary - Best quality)
-        deepseek_keys = [
-            os.getenv("DEEPSEEK_API_KEY"),
-            os.getenv("DEEPSEEK_API_KEY_2"),
-            os.getenv("DEEPSEEK_API_KEY_3"),
-            os.getenv("DEEPSEEK_API_KEY_4"),
-            os.getenv("DEEPSEEK_API_KEY_5")
-        ]
-        
-        for i, key in enumerate(deepseek_keys):
-            if key and key != "your-deepseek-api-key-here":
+        # 1. Gemini (Primary - Google AI - Free tier)
+        if GEMINI_AVAILABLE:
+            gemini_key = os.getenv("GOOGLE_API_KEY")
+            if gemini_key and gemini_key != "your-google-api-key-here":
                 self.providers.append({
-                    "name": f"DeepSeek-{i+1}",
-                    "type": "deepseek",
-                    "api_key": key,
-                    "base_url": "https://api.deepseek.com/v1",
-                    "model": "deepseek-chat",
+                    "name": "Gemini-AI",
+                    "type": "gemini",
+                    "api_key": gemini_key,
+                    "model": "gemini-1.5-flash",  # Free model: 15 req/min
                     "priority": 1
                 })
+                log.info("✅ Gemini AI configured as primary provider (Free tier)")
         
-        # 2. Hugging Face (Secondary - Good quality)
-        huggingface_tokens = [
-            os.getenv("HUGGINGFACE_API_TOKEN"),
-            os.getenv("HUGGINGFACE_API_TOKEN_2"),
-            os.getenv("HUGGINGFACE_API_TOKEN_3"),
-            os.getenv("HUGGINGFACE_API_TOKEN_4"),
-            os.getenv("HUGGINGFACE_API_TOKEN_5")
-        ]
-        
-        for i, token in enumerate(huggingface_tokens):
-            if token and token != "your-huggingface-token-here":
-                self.providers.append({
-                    "name": f"HuggingFace-{i+1}",
-                    "type": "huggingface",
-                    "api_key": token,
-                    "model_id": "microsoft/DialoGPT-medium",
-                    "priority": 2
-                })
-        
-        # 3. Ollama (Local - Always available)
-        if OLLAMA_AVAILABLE:
+        # 2. OpenRouter (Backup - Multiple free models)
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key and openrouter_key != "your-openrouter-api-key-here":
             self.providers.append({
-                "name": "Ollama-Local",
-                "type": "ollama",
-                "model": "llama3.2:3b",
-                "priority": 3
+                "name": "OpenRouter-AI",
+                "type": "openrouter",
+                "api_key": openrouter_key,
+                "model": "openai/gpt-3.5-turbo",  # Free model
+                "priority": 2
             })
-        
-        # 4. OpenAI (Fallback - if user has key)
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key and openai_key != "your-openai-api-key-here":
-            self.providers.append({
-                "name": "OpenAI",
-                "type": "openai",
-                "api_key": openai_key,
-                "model": "gpt-4o-mini",
-                "priority": 4
-            })
+            log.info("✅ OpenRouter AI configured as backup provider (Free models)")
         
         # Sort by priority
         self.providers.sort(key=lambda x: x["priority"])
         
-        log.info(f"Initialized {len(self.providers)} AI providers")
-        for provider in self.providers:
-            log.info(f"  - {provider['name']} ({provider['type']})")
+        if not self.providers:
+            log.warning("⚠️ No AI providers configured - system will use fallback responses")
+        else:
+            log.info(f"🎯 Initialized {len(self.providers)} AI providers (Free models only)")
+            for provider in self.providers:
+                log.info(f"  - {provider['name']} ({provider['type']}) - Priority {provider['priority']}")
     
     def get_next_working_provider(self):
         """Get the next working provider, skipping failed ones."""
@@ -139,41 +104,31 @@ class MultiProviderAI:
         log.warning(f"Marked provider {provider_name} as failed")
     
     def create_llm(self, provider: Dict) -> Optional[Any]:
-        """Create an LLM instance for the given provider."""
+        """Create an LLM instance for the given provider (Gemini or OpenRouter only)."""
         try:
-            if provider["type"] == "deepseek":
-                return ChatOpenAI(
-                    model=provider["model"],
-                    temperature=0.7,
-                    max_tokens=1500,
-                    api_key=provider["api_key"],
-                    base_url=provider["base_url"]
-                )
-            
-            elif provider["type"] == "huggingface":
-                if HUGGINGFACE_AVAILABLE:
-                    return ChatHuggingFace(
-                        model_id=provider["model_id"],
-                        token=provider["api_key"],
+            if provider["type"] == "gemini":
+                if GEMINI_AVAILABLE:
+                    return ChatGoogleGenerativeAI(
+                        model=provider.get("model", "gemini-1.5-flash"),
+                        google_api_key=provider["api_key"],
                         temperature=0.7,
-                        max_tokens=1500
+                        max_output_tokens=4000,
+                        convert_system_message_to_human=True
                     )
+                else:
+                    log.error("Gemini AI not available - missing dependencies")
+                    return None
             
-            elif provider["type"] == "ollama":
-                if OLLAMA_AVAILABLE:
-                    return ChatOllama(
-                        model=provider["model"],
-                        temperature=0.7,
-                        max_tokens=1500
-                    )
-            
-            elif provider["type"] == "openai":
-                return ChatOpenAI(
-                    model=provider["model"],
-                    temperature=0.7,
-                    max_tokens=1500,
-                    api_key=provider["api_key"]
-                )
+            elif provider["type"] == "openrouter":
+                # For OpenRouter, we'll use the OpenRouterAISystem directly
+                # This ensures we get the free model fallback logic
+                from backend.core.agents.openrouter_ai_system import get_openrouter_ai_system
+                openrouter_system = get_openrouter_ai_system()
+                if openrouter_system.api_key:
+                    return openrouter_system
+                else:
+                    log.error("OpenRouter API key not configured")
+                    return None
             
         except Exception as e:
             log.error(f"Failed to create LLM for {provider['name']}: {e}")

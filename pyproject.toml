@@ -32,6 +32,7 @@ ollama = "^0.2.0"
 huggingface-hub = "^0.24.0"
 pyjwt = "^2.10.1"
 langchain-core = "^0.3.72"
+langchain-google-genai = "^2.1.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

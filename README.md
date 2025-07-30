@@ -98,10 +98,33 @@ restaceratops/
 poetry install
 
 # Start the backend server
+
+## Option 1: Unified Backend (Recommended)
+```bash
+# Start the unified backend that provides access to ALL functionality
+poetry run python start_unified_backend.py
+```
+
+**Unified Backend URLs:**
+- **🦖 Main Dashboard**: http://localhost:8000 (Comprehensive interface for all features)
+- **📚 API Documentation (Swagger)**: http://localhost:8000/docs
+- **🔍 API Documentation (ReDoc)**: http://localhost:8000/redoc
+- **💚 Health Check**: http://localhost:8000/health
+- **📊 Dashboard API**: http://localhost:8000/api/dashboard
+- **🤖 Chat API**: http://localhost:8000/api/chat
+- **🧪 Tests API**: http://localhost:8000/api/tests
+- **🔄 Workflow API**: http://localhost:8000/api/workflow
+- **🏢 Enterprise API**: http://localhost:8000/api/enterprise
+- **🔗 Jira Integration**: http://localhost:8000/api/jira
+- **📡 WebSocket**: ws://localhost:8000/ws
+
+## Option 2: Standard Backend
+```bash
+# Start the standard backend
 poetry run python start_backend.py
 ```
 
-**Backend URLs:**
+**Standard Backend URLs:**
 - **Main API**: http://localhost:8000
 - **API Documentation (Swagger)**: http://localhost:8000/docs
 - **API Documentation (ReDoc)**: http://localhost:8000/redoc
@@ -143,7 +166,10 @@ npm run dev
 
 #### Backend Commands
 ```bash
-# Start backend server
+# Start unified backend (recommended - all features in one place)
+poetry run python start_unified_backend.py
+
+# Start standard backend
 poetry run python start_backend.py
 
 # Run backend tests
