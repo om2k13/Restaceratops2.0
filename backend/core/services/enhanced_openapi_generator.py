@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from urllib.parse import urljoin, urlparse
-from .auth_manager import AuthManager
+from backend.core.models.auth_manager import AuthManager
 
 log = logging.getLogger("agent.enhanced_openapi")
 

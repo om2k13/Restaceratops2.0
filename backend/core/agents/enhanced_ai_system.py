@@ -212,11 +212,20 @@ class EnhancedAISystem:
         # Initialize RAG system
         self.rag_system = get_rag_system(api_key, self.models['conversation'])
         
-        # Initialize conversation memory
-        self.conversation_memory = ConversationBufferWindowMemory(
-            k=10,  # Remember last 10 exchanges
-            return_messages=True
-        )
+        # Initialize conversation memory (using new LangChain memory system)
+        try:
+            from langchain_core.memory import ConversationBufferWindowMemory
+            self.conversation_memory = ConversationBufferWindowMemory(
+                k=10,  # Remember last 10 exchanges
+                return_messages=True
+            )
+        except ImportError:
+            # Fallback to old import if new one not available
+            from langchain.memory import ConversationBufferWindowMemory
+            self.conversation_memory = ConversationBufferWindowMemory(
+                k=10,  # Remember last 10 exchanges
+                return_messages=True
+            )
         
         # System prompts for different tasks
         self.system_prompts = {

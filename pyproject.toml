@@ -30,6 +30,8 @@ faker = "^25.0.0"
 # Free AI model dependencies
 ollama = "^0.2.0"
 huggingface-hub = "^0.24.0"
+pyjwt = "^2.10.1"
+langchain-core = "^0.3.72"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

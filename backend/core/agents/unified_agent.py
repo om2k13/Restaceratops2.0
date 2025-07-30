@@ -8,9 +8,9 @@ import sys
 import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from agent.auth_manager import AuthManager
-from agent.enhanced_openapi_generator import EnhancedOpenAPIGenerator
-from agent.test_input_manager import TestInputManager
+from backend.core.models.auth_manager import AuthManager
+from backend.core.services.enhanced_openapi_generator import EnhancedOpenAPIGenerator
+from backend.core.models.test_input_manager import TestInputManager
 
 class UnifiedRestaceratopsAgent:
     def __init__(self):
