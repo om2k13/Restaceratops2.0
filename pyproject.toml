@@ -16,11 +16,43 @@ jmespath = "^1.0"
 tenacity = "^8.3"
 prometheus-client = "^0.20"
 openai = "^1.25"
+flask = "^3.0"
+chromadb = "^1.0.15"
+langchain = "^0.3.27"
+langchain-openai = "^0.3.28"
+langchain-community = "^0.3.27"
+sentence-transformers = "^5.0.0"
+fastapi = "^0.116.1"
+uvicorn = "^0.35.0"
+cryptography = "^42.0.0"
+keyring = "^25.0.0"
+faker = "^25.0.0"
+# Free AI model dependencies
+ollama = "^0.2.0"
+huggingface-hub = "^0.24.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.2"
-pytest-asyncio = "^0.23"
+pytest = "^8.0.0"
+pytest-asyncio = "^0.24.0"
+black = "^24.0.0"
+isort = "^5.13.0"
+flake8 = "^7.0.0"
+mypy = "^1.8.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

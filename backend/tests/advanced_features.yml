@@ -1,0 +1,68 @@
+- name: "Authentication Test with Bearer Token"
+  request:
+    method: GET
+    url: https://httpbin.org/bearer
+  expect:
+    status: 200
+    save:
+      authenticated: $.authenticated
+
+- name: "Complex JSON Response Validation"
+  request:
+    method: GET
+    url: https://httpbin.org/json
+  expect:
+    status: 200
+    schema:
+      type: object
+      properties:
+        slideshow:
+          type: object
+          properties:
+            author:
+              type: string
+            date:
+              type: string
+            slides:
+              type: array
+              items:
+                type: object
+                properties:
+                  title:
+                    type: string
+                  type:
+                    type: string
+            title:
+              type: string
+          required: ["author", "slides", "title"]
+      required: ["slideshow"]
+
+- name: "Response Time Performance Test"
+  request:
+    method: GET
+    url: https://httpbin.org/delay/1
+  expect:
+    status: 200
+
+- name: "Error Handling Test"
+  request:
+    method: GET
+    url: https://httpbin.org/status/500
+  expect:
+    status: 500
+
+- name: "Content Type Validation"
+  request:
+    method: GET
+    url: https://httpbin.org/json
+  expect:
+    status: 200
+    save:
+      content_type: "Content-Type"
+
+- name: "Custom Headers Test"
+  request:
+    method: GET
+    url: https://httpbin.org/headers
+  expect:
+    status: 200 

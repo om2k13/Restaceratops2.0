@@ -1,0 +1,30 @@
+data_sources:
+  users:
+    path: examples/data/users.csv
+    type: csv
+description: Demonstrates all enhanced features working together
+name: Integration Test Suite
+templates:
+  integration_test:
+    request_id: '{{fake(uuid4)}}'
+    timestamp: '{{fake(date_time)}}'
+    user_id: '{{sequence(1)}}'
+    user_name: '{{data_source(integration_users, name)}}'
+tests:
+- count: 2
+  expect:
+    save:
+      created_user_id: $.id
+    status: 201
+  name: Integration Test - User Operations
+  request:
+    headers:
+      Authorization: '{{auth(demo_integration)}}'
+      X-Request-ID: '{request_id}'
+      X-Timestamp: '{timestamp}'
+    json:
+      id: '{user_id}'
+      name: '{user_name}'
+    method: POST
+    url: https://api.example.com/users
+  template: integration_test

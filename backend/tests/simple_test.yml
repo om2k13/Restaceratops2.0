@@ -1,0 +1,30 @@
+- name: "Test HTTPBin GET"
+  request:
+    method: GET
+    url: https://httpbin.org/get
+  expect:
+    status: 200
+
+- name: "Test HTTPBin POST"
+  request:
+    method: POST
+    url: https://httpbin.org/post
+    json:
+      test: "data"
+      message: "Hello World"
+  expect:
+    status: 200
+
+- name: "Test HTTPBin Status 404"
+  request:
+    method: GET
+    url: https://httpbin.org/status/404
+  expect:
+    status: 404
+
+- name: "Test HTTPBin Delay"
+  request:
+    method: GET
+    url: https://httpbin.org/delay/1
+  expect:
+    status: 200 

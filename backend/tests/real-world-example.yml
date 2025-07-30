@@ -1,0 +1,72 @@
+# 🦖 Real-World Example: Testing Public APIs
+# This shows how to use Restaceratops with actual public APIs
+
+- name: "GitHub API - Get User"
+  request:
+    method: GET
+    url: https://api.github.com/users/octocat
+  expect:
+    status: 200
+    save:
+      user_login: $.login
+      user_id: $.id
+
+- name: "GitHub API - Get User Repos"
+  request:
+    method: GET
+    url: https://api.github.com/users/{user_login}/repos
+  expect:
+    status: 200
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          full_name:
+            type: string
+          private:
+            type: boolean
+
+- name: "JSONPlaceholder - Get Posts"
+  request:
+    method: GET
+    url: https://jsonplaceholder.typicode.com/posts/1
+  expect:
+    status: 200
+    save:
+      post_id: $.id
+      user_id: $.userId
+
+- name: "JSONPlaceholder - Create Post"
+  request:
+    method: POST
+    url: https://jsonplaceholder.typicode.com/posts
+    json:
+      title: "Test Post from Restaceratops"
+      body: "This post was created by our API testing agent"
+      userId: 1
+  expect:
+    status: 201
+    save:
+      new_post_id: $.id
+
+- name: "JSONPlaceholder - Update Post"
+  request:
+    method: PUT
+    url: https://jsonplaceholder.typicode.com/posts/{new_post_id}
+    json:
+      id: "{new_post_id}"
+      title: "Updated Post from Restaceratops"
+      body: "This post was updated by our API testing agent"
+      userId: 1
+  expect:
+    status: 200
+
+- name: "JSONPlaceholder - Delete Post"
+  request:
+    method: DELETE
+    url: https://jsonplaceholder.typicode.com/posts/{new_post_id}
+  expect:
+    status: 200 

@@ -1,9 +1,0 @@
-
-- name: "Public cat fact"
-  request:
-    method: GET
-    url: https://catfact.ninja/fact
-  expect:
-    status: 200
-    save:
-      fact: $.fact

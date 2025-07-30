@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "name": "Laptop Pro",
+    "category": "Electronics",
+    "price": 1299.99,
+    "description": "High-performance laptop for professionals",
+    "sku": "LAP-001",
+    "in_stock": true
+  },
+  {
+    "id": 2,
+    "name": "Wireless Headphones",
+    "category": "Audio",
+    "price": 199.99,
+    "description": "Premium wireless headphones with noise cancellation",
+    "sku": "AUD-001",
+    "in_stock": true
+  },
+  {
+    "id": 3,
+    "name": "Smartphone X",
+    "category": "Electronics",
+    "price": 899.99,
+    "description": "Latest smartphone with advanced features",
+    "sku": "PHN-001",
+    "in_stock": false
+  },
+  {
+    "id": 4,
+    "name": "Coffee Maker",
+    "category": "Home & Kitchen",
+    "price": 89.99,
+    "description": "Programmable coffee maker with timer",
+    "sku": "KIT-001",
+    "in_stock": true
+  },
+  {
+    "id": 5,
+    "name": "Running Shoes",
+    "category": "Sports",
+    "price": 129.99,
+    "description": "Comfortable running shoes for all terrains",
+    "sku": "SPT-001",
+    "in_stock": true
+  },
+  {
+    "id": 6,
+    "name": "Bluetooth Speaker",
+    "category": "Audio",
+    "price": 79.99,
+    "description": "Portable Bluetooth speaker with great sound",
+    "sku": "AUD-002",
+    "in_stock": true
+  },
+  {
+    "id": 7,
+    "name": "Gaming Mouse",
+    "category": "Electronics",
+    "price": 59.99,
+    "description": "High-precision gaming mouse with RGB lighting",
+    "sku": "GAM-001",
+    "in_stock": true
+  },
+  {
+    "id": 8,
+    "name": "Yoga Mat",
+    "category": "Sports",
+    "price": 29.99,
+    "description": "Non-slip yoga mat for home workouts",
+    "sku": "SPT-002",
+    "in_stock": true
+  }
+] 

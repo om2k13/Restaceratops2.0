@@ -1,0 +1,78 @@
+- name: "Basic GET Request Test"
+  request:
+    method: GET
+    url: https://httpbin.org/get
+  expect:
+    status: 200
+    save:
+      user_agent: "User-Agent"
+
+- name: "POST Request with JSON Body"
+  request:
+    method: POST
+    url: https://httpbin.org/post
+    json:
+      name: "Restaceratops"
+      type: "API Tester"
+      version: "0.1.0"
+  expect:
+    status: 200
+    save:
+      response_data: $.json
+
+- name: "Query Parameters Test"
+  request:
+    method: GET
+    url: https://httpbin.org/get?param1=value1&param2=value2
+  expect:
+    status: 200
+
+- name: "Headers Test"
+  request:
+    method: GET
+    url: https://httpbin.org/headers
+  expect:
+    status: 200
+
+- name: "Status Code Test (404)"
+  request:
+    method: GET
+    url: https://httpbin.org/status/404
+  expect:
+    status: 404
+
+- name: "JSON Schema Validation Test"
+  request:
+    method: GET
+    url: https://httpbin.org/json
+  expect:
+    status: 200
+    schema:
+      type: object
+      properties:
+        slideshow:
+          type: object
+          properties:
+            author:
+              type: string
+            title:
+              type: string
+            slides:
+              type: array
+      required: ["slideshow"]
+
+- name: "Variable Reuse Test"
+  request:
+    method: GET
+    url: https://httpbin.org/user-agent
+  expect:
+    status: 200
+    save:
+      user_agent_header: "User-Agent"
+
+- name: "Using Saved Variable"
+  request:
+    method: GET
+    url: https://httpbin.org/headers
+  expect:
+    status: 200 

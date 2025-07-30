@@ -1,256 +1,187 @@
+# 🦖 Restaceratops - AI-Powered API Testing Platform
 
-# 🦖 Team Agentosaurus – AI-Augmented Testing Suite
+A comprehensive, AI-augmented API testing platform with real-time execution, WebSocket support, and intelligent test generation.
 
-## 🎯 **Vision: Complete AI Testing Ecosystem**
+## 🚀 Quick Start
 
-Team Agentosaurus is a comprehensive AI-augmented testing framework featuring specialized dinosaur-themed agents:
+### Prerequisites
+- Python 3.12+
+- Node.js 18+
+- Poetry (for Python dependency management)
 
-- 🦖 **Restaceratops** (API Tester) - *Async HTTP testing with YAML DSL*
-- 🦕 **Scriptodon** (Automation Generator) - *AI-powered test script generation*
-- 🦖 **Bugzilla Rex** (Bug Reporter) - *Intelligent bug detection & reporting*
-- 🦕 **Swaggosaur** (OpenAPI Converter) - *Swagger/OpenAPI to test cases*
-- 🦖 **Loadosaurus** (Performance Tester) - *Load & stress testing*
-- 🦕 **Testaraptor** (Manual Tester) - *AI-assisted manual testing*
-- 🦖 **Thinkodactyl** (Test Advisor) - *LLM-based testing strategy*
-
----
-
-## 🚀 **Restaceratops - API Testing Agent** (Ready for Deployment!)
-
-### ✨ **Features**
-* **Async HTTP** testing with `httpx` and `asyncio`
-* **YAML DSL** for human‑readable test cases (supports variable capture and reuse)
-* **Assertions** for status codes and JSON Schema validation
-* **JUnit XML, Console, Prometheus** reporters
-* **LLM booster** – optional module to generate new tests from an OpenAPI spec
-* **Docker‑ready** – one command to run anywhere
-* **CI‑friendly** – exits non‑zero on failures; drop into GitHub Actions, GitLab, Jenkins
-
-### 🏃‍♂️ **Quick Start**
-
+### Backend Setup
 ```bash
-# Install dependencies
+# Install Python dependencies
 poetry install
 
-# Run tests
-poetry run python -m agent.runner --tests tests
-
-# Run with custom concurrency
-poetry run python -m agent.runner --tests tests --concurrency 5
+# Start the FastAPI backend
+poetry run uvicorn backend.api.backend:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 🐳 **Docker Deployment**
+### Frontend Setup
 ```bash
-# Build image
-docker build -t restaceratops .
+# Install Node.js dependencies
+cd frontend
+npm install
 
-# Run with environment variables
-docker run --rm -e BASE_URL=https://your-api.com restaceratops
-
-# Run with custom test directory
-docker run --rm -v $(pwd)/tests:/app/tests restaceratops
+# Start the React development server
+npm run dev
 ```
 
-### 🤖 **Generate Tests with AI**
+### Access Points
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## 📁 Project Structure
+
+```
+restaceratops/
+├── 📁 config/                 # Configuration files
+│   ├── requirements.txt      # Alternative requirements
+│   ├── Dockerfile           # Container configuration
+│   ├── vercel.json          # Vercel deployment config
+│   ├── .env                 # Environment variables
+│   └── .env.backup          # Environment backup
+│
+├── pyproject.toml            # Python project configuration
+├── poetry.lock               # Dependency lock file
+│
+├── 📁 backend/               # Backend source code
+│   ├── 📁 api/              # API endpoints
+│   │   ├── backend.py       # Main FastAPI backend
+│   │   └── unified_backend.py # Unified API backend
+│   │
+│   ├── 📁 core/             # Core application logic
+│   │   ├── 📁 agents/       # AI agent implementations
+│   │   ├── 📁 models/       # Data models
+│   │   └── 📁 services/     # Business logic services
+│   │
+│   ├── 📁 examples/         # Example configurations
+│   └── 📁 tests/            # Test specifications
+│
+├── 📁 frontend/              # React frontend application
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   ├── pages/          # Page components
+│   │   └── services/       # API services
+│   └── package.json
+│
+├── 📁 docs/                  # Documentation
+│   ├── README.md           # Main documentation
+│   ├── DEPLOYMENT_GUIDE.md # Deployment instructions
+│   ├── FREE_AI_SETUP.md    # Free AI setup guide
+│   └── MULTI_AI_SETUP.md   # Multi-AI setup guide
+│
+├── 📁 scripts/               # Utility scripts
+│   ├── demo_*.py           # Demo scripts
+│   ├── test_*.py           # Test scripts
+│   └── debug_*.py          # Debug scripts
+│
+├── 📁 data/                  # Data storage
+│   ├── reports/            # Test reports
+│   └── vector_db/          # Vector database
+│
+├── 📁 deployments/          # Deployment configurations
+├── 📁 tools/                # Development tools
+└── 📁 .vercel/              # Vercel configuration
+```
+
+## 🎯 Key Features
+
+### 🤖 AI-Powered Testing
+- **Intelligent Test Generation**: Generate tests from OpenAPI specifications
+- **Natural Language Interface**: Chat with AI to create and modify tests
+- **Multi-AI Support**: Integration with OpenAI, DeepSeek, and free AI models
+- **RAG System**: Retrieval-Augmented Generation for context-aware responses
+
+### 🔄 Real-Time Execution
+- **WebSocket Support**: Real-time test execution updates
+- **Live Dashboard**: Monitor test execution progress
+- **Parallel Testing**: Run multiple tests simultaneously
+- **Interactive Reports**: Detailed test results and analytics
+
+### 🛠️ Advanced Features
+- **Credential Management**: Secure storage and management of API credentials
+- **Data Source Integration**: Support for CSV, JSON, and database sources
+- **Template System**: Reusable test templates
+- **Assertion Framework**: Comprehensive assertion capabilities
+- **Vector Database**: Semantic search and context management
+
+## 🚀 Deployment Options
+
+### Local Development
 ```bash
-# Generate tests from OpenAPI spec
-poetry run python -m agent.generator_llm openapi.json
+# Backend
+poetry run uvicorn backend.api.backend:app --reload
 
-# Use custom model
-poetry run python -m agent.generator_llm openapi.json --model gpt-4
+# Frontend
+cd frontend && npm run dev
 ```
 
-### 💬 **Chat with Restaceratops (NEW!)**
-Talk to your agent in simple English:
-
+### Docker Deployment
 ```bash
-# Start interactive chat
-poetry run python -m agent.chat_interface
-
-# Demo the conversational features
-poetry run python demo_chat.py
+docker build -f config/Dockerfile -t restaceratops .
+docker run -p 8000:8000 restaceratops
 ```
 
-**Example Conversations:**
-```
-You: "Hello!"
-Restaceratops: "🦖 Hello! I'm Restaceratops, your AI-powered API testing agent!"
+### Cloud Deployment
+- **Vercel**: See `config/vercel.json`
+- **AWS Lambda**: See `deployments/aws-lambda.yml`
+- **Kubernetes**: See `deployments/kubernetes-cronjob.yml`
+- **Heroku**: See `deployments/heroku-app.json`
 
-You: "Test my API at https://my-api.com"
-Restaceratops: *runs health checks and basic tests*
+## 📚 Documentation
 
-You: "Create tests for my authentication endpoint"
-Restaceratops: *generates login/logout test cases*
+- **[Main Documentation](docs/README.md)**: Comprehensive project overview
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)**: Detailed deployment instructions
+- **[Free AI Setup](docs/FREE_AI_SETUP.md)**: Guide for using free AI models
+- **[Multi-AI Setup](docs/MULTI_AI_SETUP.md)**: Configuration for multiple AI providers
 
-You: "Show me the test results"
-Restaceratops: *displays detailed results and metrics*
-```
-
-### 📊 **Deploy as Kubernetes CronJob**
-
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: restaceratops-nightly
-spec:
-  schedule: "0 1 * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-          - name: runner
-            image: ghcr.io/your/restaceratops:0.1.0
-            env:
-            - name: BASE_URL
-              value: "https://your-api.com"
-            - name: BEARER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: api-secrets
-                  key: bearer-token
-          restartPolicy: Never
-```
-
----
-
-## 🧪 **Test Examples**
-
-### Basic API Test
-```yaml
-- name: "User Authentication"
-  request:
-    method: POST
-    url: https://api.example.com/auth
-    json:
-      username: "testuser"
-      password: "testpass"
-  expect:
-    status: 200
-    save:
-      token: $.access_token
-```
-
-### Schema Validation
-```yaml
-- name: "User Profile Validation"
-  request:
-    method: GET
-    url: https://api.example.com/user/profile
-  expect:
-    status: 200
-    schema:
-      type: object
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-      required: ["id", "name", "email"]
-```
-
-### Variable Reuse
-```yaml
-- name: "Create User"
-  request:
-    method: POST
-    url: https://api.example.com/users
-    json:
-      name: "John Doe"
-      email: "john@example.com"
-  expect:
-    status: 201
-    save:
-      user_id: $.id
-
-- name: "Get Created User"
-  request:
-    method: GET
-    url: https://api.example.com/users/{user_id}
-  expect:
-    status: 200
-```
-
----
-
-## 🔧 **Configuration**
+## 🔧 Configuration
 
 ### Environment Variables
-- `BASE_URL`: Base URL for API endpoints
-- `BEARER_TOKEN`: Authentication token
-- `PUSHGATEWAY_URL`: Prometheus push gateway URL
+Create a `.env` file in the `config/` directory:
 
-### Command Line Options
-- `--tests`: Directory containing YAML test files
-- `--concurrency`: Maximum concurrent requests (default: 5)
-- `--help`: Show help message
+```env
+# AI Provider Configuration
+OPENAI_API_KEY=your_openai_key
+DEEPSEEK_API_KEY=your_deepseek_key
+OPENROUTER_API_KEY=your_openrouter_key
 
----
+# Database Configuration
+DATABASE_URL=your_database_url
 
-## 📈 **Monitoring & Reporting**
-
-### Console Output
-```
-=== Restaceratops Report ===
-✓ User Authentication (245.2 ms)
-✓ Profile Validation (189.7 ms)
-✗ Create User (456.1 ms)
-    → Status 400 != 201
-Total: 3, Failed: 1, Time: 0.9s
+# Security
+SECRET_KEY=your_secret_key
 ```
 
-### JUnit XML
-```xml
-<?xml version='1.0' encoding='utf-8'?>
-<testsuite name="restaceratops">
-  <testcase name="User Authentication" time="0.245" />
-  <testcase name="Profile Validation" time="0.190" />
-  <testcase name="Create User" time="0.456">
-    <failure message="Status 400 != 201" />
-  </testcase>
-</testsuite>
-```
+### AI Model Configuration
+The platform supports multiple AI providers:
+- **OpenAI**: GPT-4, GPT-3.5-turbo
+- **DeepSeek**: DeepSeek-Coder, DeepSeek-Chat
+- **OpenRouter**: Access to multiple AI models
+- **Free Models**: Ollama, HuggingFace models
 
-### Prometheus Metrics
-- `restaceratops_step_latency_seconds`: Request latency
-- `restaceratops_step_failures`: Failure count
-
----
-
-## 🚧 **Roadmap: Complete Team Agentosaurus**
-
-### Phase 1: Core Agents ✅
-- [x] **Restaceratops** - API Testing
-- [ ] **Swaggosaur** - OpenAPI to Test Cases
-- [ ] **Thinkodactyl** - Test Strategy Advisor
-
-### Phase 2: Advanced Testing
-- [ ] **Loadosaurus** - Performance Testing
-- [ ] **Scriptodon** - Test Automation Generator
-- [ ] **Bugzilla Rex** - Intelligent Bug Reporting
-
-### Phase 3: Integration & Orchestration
-- [ ] **Testaraptor** - Manual Testing Assistant
-- [ ] **Agentosaurus Commander** - Multi-agent orchestration
-- [ ] **DinoHub** - Centralized test management
-
----
-
-## 🤝 **Contributing**
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## 📄 **License**
+## 📄 License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+- **Issues**: Create an issue on GitHub
+- **Documentation**: Check the `docs/` directory
+- **Examples**: See `src/examples/` for usage examples
 
 ---
 
-*Built with 🦖 by Team Agentosaurus*
+**🦖 Restaceratops** - Making API testing intelligent and accessible! 
