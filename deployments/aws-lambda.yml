@@ -103,4 +103,3 @@ Outputs:
     Description: 'Restaceratops Lambda Function Name'
     Value: !Ref RestaceratopsFunction
     Export:
-      Name: !Sub '${AWS::StackName}-FunctionName' # Updated: Wed Jul 30 10:52:25 IST 2025
