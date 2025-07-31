@@ -23,7 +23,14 @@ from backend.api.workflow_api import router as workflow_router
 from backend.api.enterprise_api import router as enterprise_router
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Console output
+        logging.FileHandler('conversation_logs.txt', mode='a')  # File output
+    ]
+)
 log = logging.getLogger("restaceratops.backend")
 
 # Initialize enhanced chat interface
@@ -354,6 +361,9 @@ async def get_jira_stories(request: Dict[str, Any]):
     except Exception as e:
         log.error(f"Jira stories error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Missing endpoints that frontend is trying to call
+# Note: All required endpoints already exist in workflow_api.py and enterprise_api.py
 
 # Error handlers
 @app.exception_handler(404)
