@@ -4,7 +4,11 @@ Simple script to start the Restaceratops backend
 """
 
 import uvicorn
+from dotenv import load_dotenv
 from backend.api.backend import app
+
+# Load environment variables from .env file
+load_dotenv()
 
 if __name__ == "__main__":
     print("Starting Restaceratops backend...")

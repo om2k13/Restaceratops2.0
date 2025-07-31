@@ -2,9 +2,9 @@
 [tool.poetry]
 name = "restaceratops"
 version = "0.1.0"
-description = "Async, AI‑augmented API‑testing agent"
+description = "Async, AI‑augmented API‑testing agent using OpenRouter Qwen3 Coder"
 authors = ["Your Name <you@example.com>"]
-packages = [{include = "agent"}]
+packages = [{include = "backend"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -16,23 +16,15 @@ jmespath = "^1.0"
 tenacity = "^8.3"
 prometheus-client = "^0.20"
 openai = "^1.25"
-flask = "^3.0"
-chromadb = "^1.0.15"
-langchain = "^0.3.27"
-langchain-openai = "^0.3.28"
-langchain-community = "^0.3.27"
-sentence-transformers = "^5.0.0"
 fastapi = "^0.116.1"
 uvicorn = "^0.35.0"
 cryptography = "^42.0.0"
 keyring = "^25.0.0"
 faker = "^25.0.0"
-# Free AI model dependencies
-ollama = "^0.2.0"
-huggingface-hub = "^0.24.0"
-pyjwt = "^2.10.1"
+python-dotenv = "^1.0.0"
+langchain = "^0.3.27"
+langchain-openai = "^0.3.28"
 langchain-core = "^0.3.72"
-langchain-google-genai = "^2.1.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -1,99 +1,84 @@
 #!/usr/bin/env python3
 """
-🦖 Vector Store System for Restaceratops
-Advanced vector database integration using ChromaDB for context-aware AI responses
+🦖 Simplified Vector Store System for Restaceratops
+Lightweight file-based storage for conversation context
 """
 
 import os
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any
 from datetime import datetime
-import asyncio
-
-import chromadb
-from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
 
 log = logging.getLogger("agent.vector_store")
 
 class VectorStore:
-    """Advanced vector database system for Restaceratops AI agent."""
+    """Simplified file-based storage system for Restaceratops AI agent."""
     
     def __init__(self, persist_directory: str = "vector_db"):
-        """Initialize the vector store system."""
+        """Initialize the simplified vector store system."""
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(exist_ok=True)
         
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=str(self.persist_directory),
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            )
-        )
+        # File paths for different data types
+        self.conversations_file = self.persist_directory / "conversations.json"
+        self.knowledge_file = self.persist_directory / "knowledge.json"
+        self.api_docs_file = self.persist_directory / "api_docs.json"
         
-        # Initialize collections
-        self.conversation_collection = self.client.get_or_create_collection(
-            name="conversations",
-            metadata={"description": "Conversation history and context"}
-        )
+        # Initialize files if they don't exist
+        self._initialize_files()
         
-        self.test_knowledge_collection = self.client.get_or_create_collection(
-            name="test_knowledge",
-            metadata={"description": "API testing knowledge and best practices"}
-        )
+        log.info(f"Simplified vector store initialized at {self.persist_directory}")
+    
+    def _initialize_files(self):
+        """Initialize storage files if they don't exist."""
+        files = [
+            (self.conversations_file, []),
+            (self.knowledge_file, []),
+            (self.api_docs_file, [])
+        ]
         
-        self.api_docs_collection = self.client.get_or_create_collection(
-            name="api_documentation",
-            metadata={"description": "API documentation and specifications"}
-        )
-        
-        # Initialize sentence transformer for embeddings
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        # Initialize text splitter
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-            separators=["\n\n", "\n", " ", ""]
-        )
-        
-        log.info(f"Vector store initialized at {self.persist_directory}")
+        for file_path, default_data in files:
+            if not file_path.exists():
+                with open(file_path, 'w') as f:
+                    json.dump(default_data, f, indent=2)
+    
+    def _load_data(self, file_path: Path) -> List[Dict]:
+        """Load data from a JSON file."""
+        try:
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+    
+    def _save_data(self, file_path: Path, data: List[Dict]):
+        """Save data to a JSON file."""
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=2)
     
     async def add_conversation_context(self, 
                                      user_input: str, 
                                      ai_response: str, 
                                      metadata: Optional[Dict] = None) -> str:
-        """Add conversation context to the vector store."""
+        """Add conversation context to storage."""
         try:
-            # Create conversation document
-            conversation_text = f"User: {user_input}\nAI: {ai_response}"
-            
-            # Generate embedding
-            embedding = self.embedding_model.encode(conversation_text).tolist()
-            
-            # Prepare metadata
-            doc_metadata = {
-                "type": "conversation",
-                "timestamp": datetime.now().isoformat(),
+            conversation_data = {
+                "id": f"conv_{datetime.now().timestamp()}",
                 "user_input": user_input,
                 "ai_response": ai_response,
-                **(metadata or {})
+                "timestamp": datetime.now().isoformat(),
+                "metadata": metadata or {}
             }
             
-            # Add to collection
-            self.conversation_collection.add(
-                documents=[conversation_text],
-                embeddings=[embedding],
-                metadatas=[doc_metadata],
-                ids=[f"conv_{datetime.now().timestamp()}"]
-            )
+            conversations = self._load_data(self.conversations_file)
+            conversations.append(conversation_data)
+            
+            # Keep only last 100 conversations
+            if len(conversations) > 100:
+                conversations = conversations[-100:]
+            
+            self._save_data(self.conversations_file, conversations)
             
             log.info(f"Added conversation context: {user_input[:50]}...")
             return "conversation_context_added"
@@ -106,39 +91,22 @@ class VectorStore:
                                knowledge_text: str, 
                                category: str = "general",
                                metadata: Optional[Dict] = None) -> str:
-        """Add API testing knowledge to the vector store."""
+        """Add test knowledge to storage."""
         try:
-            # Split text into chunks
-            chunks = self.text_splitter.split_text(knowledge_text)
+            knowledge_data = {
+                "id": f"knowledge_{datetime.now().timestamp()}",
+                "text": knowledge_text,
+                "category": category,
+                "timestamp": datetime.now().isoformat(),
+                "metadata": metadata or {}
+            }
             
-            # Generate embeddings for each chunk
-            embeddings = self.embedding_model.encode(chunks).tolist()
+            knowledge = self._load_data(self.knowledge_file)
+            knowledge.append(knowledge_data)
+            self._save_data(self.knowledge_file, knowledge)
             
-            # Prepare metadata for each chunk
-            chunk_metadata = []
-            chunk_ids = []
-            
-            for i, chunk in enumerate(chunks):
-                chunk_metadata.append({
-                    "type": "test_knowledge",
-                    "category": category,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "timestamp": datetime.now().isoformat(),
-                    **(metadata or {})
-                })
-                chunk_ids.append(f"knowledge_{category}_{datetime.now().timestamp()}_{i}")
-            
-            # Add to collection
-            self.test_knowledge_collection.add(
-                documents=chunks,
-                embeddings=embeddings,
-                metadatas=chunk_metadata,
-                ids=chunk_ids
-            )
-            
-            log.info(f"Added {len(chunks)} knowledge chunks for category: {category}")
-            return f"knowledge_added_{len(chunks)}_chunks"
+            log.info(f"Added test knowledge: {category}")
+            return "test_knowledge_added"
             
         except Exception as e:
             log.error(f"Error adding test knowledge: {e}")
@@ -148,39 +116,22 @@ class VectorStore:
                                   api_spec: str, 
                                   api_name: str,
                                   metadata: Optional[Dict] = None) -> str:
-        """Add API documentation to the vector store."""
+        """Add API documentation to storage."""
         try:
-            # Split API specification into chunks
-            chunks = self.text_splitter.split_text(api_spec)
+            api_data = {
+                "id": f"api_{datetime.now().timestamp()}",
+                "name": api_name,
+                "spec": api_spec,
+                "timestamp": datetime.now().isoformat(),
+                "metadata": metadata or {}
+            }
             
-            # Generate embeddings for each chunk
-            embeddings = self.embedding_model.encode(chunks).tolist()
+            api_docs = self._load_data(self.api_docs_file)
+            api_docs.append(api_data)
+            self._save_data(self.api_docs_file, api_docs)
             
-            # Prepare metadata for each chunk
-            chunk_metadata = []
-            chunk_ids = []
-            
-            for i, chunk in enumerate(chunks):
-                chunk_metadata.append({
-                    "type": "api_documentation",
-                    "api_name": api_name,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "timestamp": datetime.now().isoformat(),
-                    **(metadata or {})
-                })
-                chunk_ids.append(f"api_{api_name}_{datetime.now().timestamp()}_{i}")
-            
-            # Add to collection
-            self.api_docs_collection.add(
-                documents=chunks,
-                embeddings=embeddings,
-                metadatas=chunk_metadata,
-                ids=chunk_ids
-            )
-            
-            log.info(f"Added {len(chunks)} API documentation chunks for: {api_name}")
-            return f"api_docs_added_{len(chunks)}_chunks"
+            log.info(f"Added API documentation: {api_name}")
+            return "api_documentation_added"
             
         except Exception as e:
             log.error(f"Error adding API documentation: {e}")
@@ -189,29 +140,28 @@ class VectorStore:
     async def search_conversation_context(self, 
                                         query: str, 
                                         n_results: int = 5) -> List[Dict]:
-        """Search for relevant conversation context."""
+        """Search conversation context (simple keyword matching)."""
         try:
-            # Generate query embedding
-            query_embedding = self.embedding_model.encode(query).tolist()
+            conversations = self._load_data(self.conversations_file)
+            results = []
             
-            # Search in conversation collection
-            results = self.conversation_collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                include=["documents", "metadatas", "distances"]
-            )
+            query_lower = query.lower()
+            for conv in conversations:
+                score = 0
+                if query_lower in conv.get('user_input', '').lower():
+                    score += 2
+                if query_lower in conv.get('ai_response', '').lower():
+                    score += 1
+                
+                if score > 0:
+                    results.append({
+                        **conv,
+                        'score': score
+                    })
             
-            # Format results
-            formatted_results = []
-            for i in range(len(results['documents'][0])):
-                formatted_results.append({
-                    "content": results['documents'][0][i],
-                    "metadata": results['metadatas'][0][i],
-                    "distance": results['distances'][0][i]
-                })
-            
-            log.info(f"Found {len(formatted_results)} relevant conversation contexts")
-            return formatted_results
+            # Sort by score and return top results
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return results[:n_results]
             
         except Exception as e:
             log.error(f"Error searching conversation context: {e}")
@@ -221,35 +171,31 @@ class VectorStore:
                                   query: str, 
                                   category: Optional[str] = None,
                                   n_results: int = 5) -> List[Dict]:
-        """Search for relevant test knowledge."""
+        """Search test knowledge (simple keyword matching)."""
         try:
-            # Generate query embedding
-            query_embedding = self.embedding_model.encode(query).tolist()
+            knowledge = self._load_data(self.knowledge_file)
+            results = []
             
-            # Prepare where clause if category is specified
-            where_clause = None
-            if category:
-                where_clause = {"category": category}
+            query_lower = query.lower()
+            for item in knowledge:
+                if category and item.get('category') != category:
+                    continue
+                
+                score = 0
+                if query_lower in item.get('text', '').lower():
+                    score += 2
+                if query_lower in item.get('category', '').lower():
+                    score += 1
+                
+                if score > 0:
+                    results.append({
+                        **item,
+                        'score': score
+                    })
             
-            # Search in test knowledge collection
-            results = self.test_knowledge_collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=where_clause,
-                include=["documents", "metadatas", "distances"]
-            )
-            
-            # Format results
-            formatted_results = []
-            for i in range(len(results['documents'][0])):
-                formatted_results.append({
-                    "content": results['documents'][0][i],
-                    "metadata": results['metadatas'][0][i],
-                    "distance": results['distances'][0][i]
-                })
-            
-            log.info(f"Found {len(formatted_results)} relevant test knowledge items")
-            return formatted_results
+            # Sort by score and return top results
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return results[:n_results]
             
         except Exception as e:
             log.error(f"Error searching test knowledge: {e}")
@@ -259,35 +205,31 @@ class VectorStore:
                                      query: str, 
                                      api_name: Optional[str] = None,
                                      n_results: int = 5) -> List[Dict]:
-        """Search for relevant API documentation."""
+        """Search API documentation (simple keyword matching)."""
         try:
-            # Generate query embedding
-            query_embedding = self.embedding_model.encode(query).tolist()
+            api_docs = self._load_data(self.api_docs_file)
+            results = []
             
-            # Prepare where clause if api_name is specified
-            where_clause = None
-            if api_name:
-                where_clause = {"api_name": api_name}
+            query_lower = query.lower()
+            for doc in api_docs:
+                if api_name and doc.get('name') != api_name:
+                    continue
+                
+                score = 0
+                if query_lower in doc.get('name', '').lower():
+                    score += 2
+                if query_lower in doc.get('spec', '').lower():
+                    score += 1
+                
+                if score > 0:
+                    results.append({
+                        **doc,
+                        'score': score
+                    })
             
-            # Search in API documentation collection
-            results = self.api_docs_collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=where_clause,
-                include=["documents", "metadatas", "distances"]
-            )
-            
-            # Format results
-            formatted_results = []
-            for i in range(len(results['documents'][0])):
-                formatted_results.append({
-                    "content": results['documents'][0][i],
-                    "metadata": results['metadatas'][0][i],
-                    "distance": results['distances'][0][i]
-                })
-            
-            log.info(f"Found {len(formatted_results)} relevant API documentation items")
-            return formatted_results
+            # Sort by score and return top results
+            results.sort(key=lambda x: x['score'], reverse=True)
+            return results[:n_results]
             
         except Exception as e:
             log.error(f"Error searching API documentation: {e}")
@@ -296,234 +238,121 @@ class VectorStore:
     async def get_context_for_query(self, 
                                   query: str, 
                                   max_results: int = 10) -> Dict[str, List[Dict]]:
-        """Get comprehensive context for a query from all collections."""
+        """Get relevant context for a query from all collections."""
         try:
-            # Search in all collections
-            conversation_context = await self.search_conversation_context(
-                query, n_results=max_results // 3
-            )
-            
-            test_knowledge = await self.search_test_knowledge(
-                query, n_results=max_results // 3
-            )
-            
-            api_docs = await self.search_api_documentation(
-                query, n_results=max_results // 3
-            )
+            conversations = await self.search_conversation_context(query, max_results // 3)
+            knowledge = await self.search_test_knowledge(query, n_results=max_results // 3)
+            api_docs = await self.search_api_documentation(query, n_results=max_results // 3)
             
             return {
-                "conversation_context": conversation_context,
-                "test_knowledge": test_knowledge,
+                "conversations": conversations,
+                "knowledge": knowledge,
                 "api_documentation": api_docs
             }
             
         except Exception as e:
-            log.error(f"Error getting comprehensive context: {e}")
+            log.error(f"Error getting context for query: {e}")
             return {
-                "conversation_context": [],
-                "test_knowledge": [],
+                "conversations": [],
+                "knowledge": [],
                 "api_documentation": []
             }
     
-    async def initialize_default_knowledge(self) -> str:
-        """Initialize the vector store with default API testing knowledge."""
-        try:
-            # Default API testing knowledge
-            default_knowledge = [
-                {
-                    "category": "best_practices",
-                    "content": """
-                    API Testing Best Practices:
-                    1. Always test both positive and negative scenarios
-                    2. Validate response status codes and headers
-                    3. Test with realistic data and edge cases
-                    4. Implement proper error handling
-                    5. Use environment variables for configuration
-                    6. Test authentication and authorization
-                    7. Monitor performance and response times
-                    8. Document test cases and expected results
-                    """
-                },
-                {
-                    "category": "authentication",
-                    "content": """
-                    API Authentication Testing:
-                    1. Test with valid authentication tokens
-                    2. Test with expired tokens
-                    3. Test with invalid tokens
-                    4. Test with missing authentication
-                    5. Test token refresh mechanisms
-                    6. Test different authentication methods (Bearer, API Key, OAuth)
-                    7. Test rate limiting with authentication
-                    """
-                },
-                {
-                    "category": "error_handling",
-                    "content": """
-                    API Error Handling Testing:
-                    1. Test 400 Bad Request responses
-                    2. Test 401 Unauthorized responses
-                    3. Test 403 Forbidden responses
-                    4. Test 404 Not Found responses
-                    5. Test 500 Internal Server Error responses
-                    6. Test timeout scenarios
-                    7. Test network connectivity issues
-                    8. Validate error response formats
-                    """
-                },
-                {
-                    "category": "performance",
-                    "content": """
-                    API Performance Testing:
-                    1. Measure response times under normal load
-                    2. Test concurrent request handling
-                    3. Monitor memory and CPU usage
-                    4. Test with large payloads
-                    5. Validate timeout configurations
-                    6. Test rate limiting behavior
-                    7. Monitor database connection pools
-                    8. Test caching mechanisms
-                    """
-                }
-            ]
-            
-            # Add default knowledge to vector store
-            for knowledge_item in default_knowledge:
-                await self.add_test_knowledge(
-                    knowledge_item["content"],
-                    knowledge_item["category"]
-                )
-            
-            log.info("Initialized vector store with default API testing knowledge")
-            return "default_knowledge_initialized"
-            
-        except Exception as e:
-            log.error(f"Error initializing default knowledge: {e}")
-            return f"error: {str(e)}"
-    
     async def get_collection_stats(self) -> Dict[str, Any]:
-        """Get statistics about the vector store collections."""
+        """Get statistics about stored data."""
         try:
-            stats = {}
+            conversations = self._load_data(self.conversations_file)
+            knowledge = self._load_data(self.knowledge_file)
+            api_docs = self._load_data(self.api_docs_file)
             
-            # Get conversation collection stats
-            conv_count = self.conversation_collection.count()
-            stats["conversations"] = {
-                "total_documents": conv_count,
-                "collection_name": "conversations"
+            return {
+                "total_conversations": len(conversations),
+                "total_knowledge_items": len(knowledge),
+                "total_api_docs": len(api_docs),
+                "storage_path": str(self.persist_directory),
+                "last_updated": datetime.now().isoformat()
             }
-            
-            # Get test knowledge collection stats
-            knowledge_count = self.test_knowledge_collection.count()
-            stats["test_knowledge"] = {
-                "total_documents": knowledge_count,
-                "collection_name": "test_knowledge"
-            }
-            
-            # Get API documentation collection stats
-            api_docs_count = self.api_docs_collection.count()
-            stats["api_documentation"] = {
-                "total_documents": api_docs_count,
-                "collection_name": "api_documentation"
-            }
-            
-            return stats
             
         except Exception as e:
             log.error(f"Error getting collection stats: {e}")
-            return {"error": str(e)}
+            return {
+                "error": str(e),
+                "storage_path": str(self.persist_directory)
+            }
     
     async def reset_collections(self) -> str:
-        """Reset all collections (use with caution)."""
+        """Reset all collections."""
         try:
-            # Delete and recreate collections
-            self.client.delete_collection("conversations")
-            self.client.delete_collection("test_knowledge")
-            self.client.delete_collection("api_documentation")
-            
-            # Recreate collections
-            self.conversation_collection = self.client.create_collection(
-                name="conversations",
-                metadata={"description": "Conversation history and context"}
-            )
-            
-            self.test_knowledge_collection = self.client.create_collection(
-                name="test_knowledge",
-                metadata={"description": "API testing knowledge and best practices"}
-            )
-            
-            self.api_docs_collection = self.client.create_collection(
-                name="api_documentation",
-                metadata={"description": "API documentation and specifications"}
-            )
-            
-            log.info("Reset all vector store collections")
+            self._initialize_files()
+            log.info("All collections reset successfully")
             return "collections_reset"
             
         except Exception as e:
             log.error(f"Error resetting collections: {e}")
             return f"error: {str(e)}"
 
-# Global vector store instance
-_vector_store = None
-
 def get_vector_store() -> VectorStore:
-    """Get the global vector store instance."""
-    global _vector_store
-    if _vector_store is None:
-        _vector_store = VectorStore()
-    return _vector_store
+    """Get vector store instance."""
+    return VectorStore()
 
 async def setup_vector_store() -> str:
-    """Set up the vector store with default knowledge."""
+    """Setup vector store with default knowledge."""
     try:
-        vector_store = get_vector_store()
-        result = await vector_store.initialize_default_knowledge()
-        return result
+        store = get_vector_store()
+        
+        # Add some default test knowledge
+        default_knowledge = [
+            {
+                "text": "API testing should include positive tests, negative tests, and edge cases.",
+                "category": "best_practices"
+            },
+            {
+                "text": "Always test authentication, authorization, and error handling in APIs.",
+                "category": "security"
+            },
+            {
+                "text": "Monitor response times and performance metrics during API testing.",
+                "category": "performance"
+            }
+        ]
+        
+        for item in default_knowledge:
+            await store.add_test_knowledge(item["text"], item["category"])
+        
+        return "vector_store_setup_complete"
+        
     except Exception as e:
         log.error(f"Error setting up vector store: {e}")
         return f"error: {str(e)}"
 
 def main():
     """Main function for testing the vector store."""
-    import asyncio
-    
     async def test_vector_store():
-        print("🦖 Testing Vector Store System...")
+        store = get_vector_store()
         
-        # Initialize vector store
-        vector_store = get_vector_store()
-        
-        # Test adding conversation context
-        print("📝 Adding conversation context...")
-        result = await vector_store.add_conversation_context(
-            "How do I test API authentication?",
-            "To test API authentication, you should test with valid tokens, expired tokens, and invalid tokens.",
-            {"test": True}
+        # Test adding conversation
+        result = await store.add_conversation_context(
+            "Hello, how do I test APIs?",
+            "I can help you test APIs! Here are some tips..."
         )
-        print(f"Result: {result}")
+        print(f"Add conversation result: {result}")
         
-        # Test adding test knowledge
-        print("📚 Adding test knowledge...")
-        result = await vector_store.add_test_knowledge(
-            "API testing involves validating endpoints, status codes, and response formats.",
-            "general"
+        # Test adding knowledge
+        result = await store.add_test_knowledge(
+            "Always test both valid and invalid inputs",
+            "testing_tips"
         )
-        print(f"Result: {result}")
+        print(f"Add knowledge result: {result}")
         
         # Test searching
-        print("🔍 Searching for context...")
-        results = await vector_store.get_context_for_query("authentication testing")
-        print(f"Found {len(results['conversation_context'])} conversation contexts")
-        print(f"Found {len(results['test_knowledge'])} knowledge items")
+        results = await store.search_conversation_context("test APIs")
+        print(f"Search results: {len(results)} found")
         
-        # Get stats
-        print("📊 Getting collection stats...")
-        stats = await vector_store.get_collection_stats()
+        # Test stats
+        stats = await store.get_collection_stats()
         print(f"Stats: {stats}")
-        
-        print("✅ Vector store test completed!")
     
+    import asyncio
     asyncio.run(test_vector_store())
 
 if __name__ == "__main__":

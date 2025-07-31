@@ -1,464 +1,220 @@
-# 🦖 Restaceratops - AI-Powered API Testing Platform
+# 🦖 Restaceratops
 
-A comprehensive, AI-augmented API testing platform with advanced workflow management, real-time monitoring, and intelligent test generation capabilities.
+**AI-Powered API Testing Agent using OpenRouter Qwen3 Coder**
 
-## 🚀 Quick Reference
+Restaceratops is a modern, AI-augmented API testing platform that leverages the power of OpenRouter's Qwen3 Coder model to provide intelligent test generation, execution, and analysis.
 
-| Service | URL | Command |
-|---------|-----|---------|
-| **Frontend** | http://localhost:5173 | `cd frontend && npm run dev` |
-| **Backend API** | http://localhost:8000 | `poetry run python start_backend.py` |
-| **API Docs** | http://localhost:8000/docs | - |
-| **Health Check** | http://localhost:8000/health | - |
-| **WebSocket** | ws://localhost:8000/ws | - |
+## ✨ Features
 
-### Quick Start Commands
-```bash
-# Option 1: Use the startup script (recommended)
-./start.sh
-
-# Option 2: Manual startup
-# Terminal 1: Backend
-poetry install && poetry run python start_backend.py
-
-# Terminal 2: Frontend  
-cd frontend && npm install && npm run dev
-```
-
-## 🚀 Features
-
-- **🤖 AI-Powered Test Generation** - Automatically generate comprehensive test cases using advanced AI models
-- **🔄 Advanced Workflow Management** - Create and manage complex testing workflows
-- **📊 Real-time Test Monitoring** - Monitor test execution with live performance metrics
-- **🏢 Enterprise Features** - Multi-platform support, CI/CD integration, and security compliance
-- **💬 Enhanced Chat Interface** - Interactive AI assistant for testing guidance
-- **📈 Comprehensive Analytics** - Detailed reporting and performance analysis
-- **🔗 Jira Integration** - Seamless integration with project management tools
-- **🌐 Multi-AI Provider Support** - Support for OpenAI, OpenRouter, and local AI models
+- 🤖 **AI-Powered Testing**: Uses OpenRouter Qwen3 Coder for intelligent test generation
+- 🧪 **Comprehensive Testing**: Supports positive, negative, and edge case testing
+- 📊 **Real-time Monitoring**: Live test execution monitoring and reporting
+- 🔧 **Easy Integration**: Simple setup with minimal dependencies
+- 💰 **Cost-Effective**: Uses free OpenRouter models for zero-cost AI integration
+- 🚀 **Modern Stack**: Built with FastAPI, React, and TypeScript
 
 ## 🏗️ Architecture
 
 ```
 restaceratops/
-├── backend/                 # FastAPI backend with AI services
-│   ├── api/                # API endpoints and routers
-│   ├── core/               # Core business logic
-│   │   ├── agents/         # AI agents and chat interfaces
-│   │   ├── models/         # Data models and managers
-│   │   └── services/       # Business services
-│   └── tests/              # Backend test files
-├── frontend/               # React + TypeScript frontend
+├── backend/                 # FastAPI backend
+│   ├── api/                # API endpoints
+│   ├── core/               # Core functionality
+│   │   ├── agents/         # AI agents (OpenRouter Qwen3)
+│   │   ├── models/         # Data models
+│   │   └── services/       # Business logic
+│   └── tests/              # Backend tests
+├── frontend/               # React frontend
 │   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Page components
+│   │   ├── pages/          # React components
 │   │   └── services/       # API services
-│   └── tests/              # Frontend test files
-├── config/                 # Configuration files
+├── docs/                   # Documentation
+│   └── md/                 # Markdown files
 ├── scripts/                # Utility scripts
-└── deployments/            # Deployment configurations
+└── data/                   # Data storage
 ```
-
-## 🛠️ Technology Stack
-
-### Backend
-- **FastAPI** - Modern, fast web framework
-- **Python 3.12** - Latest Python version
-- **Poetry** - Dependency management
-- **LangChain** - AI/LLM integration
-- **ChromaDB** - Vector database for RAG
-- **PyJWT** - Authentication
-- **Uvicorn** - ASGI server
-
-### Frontend
-- **React 18** - Modern React with hooks
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool
-- **Tailwind CSS** - Utility-first CSS
-- **Framer Motion** - Animation library
-- **React Router** - Client-side routing
-- **Vitest** - Testing framework
-
-### AI/ML
-- **OpenAI GPT Models** - Primary AI provider
-- **OpenRouter** - Multi-model AI access
-- **Ollama** - Local AI models
-- **Sentence Transformers** - Text embeddings
-- **RAG System** - Retrieval-augmented generation
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.12+
 - Node.js 18+
-- Poetry (Python package manager)
+- OpenRouter API key
 
-### Backend Setup
-```bash
-# Install dependencies
-poetry install
+### Installation
 
-# Start the backend server
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd restaceratops
+   ```
 
-## Option 1: Unified Backend (Recommended)
-```bash
-# Start the unified backend that provides access to ALL functionality
-poetry run python start_unified_backend.py
+2. **Set up environment**
+   ```bash
+   # Create .env file
+   echo "OPENROUTER_API_KEY=your-api-key-here" > .env
+   ```
+
+3. **Install dependencies**
+   ```bash
+   # Install Python dependencies
+   poetry install
+   
+   # Install frontend dependencies
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+4. **Start the application**
+   ```bash
+   # Use the startup script
+   ./start.sh
+   ```
+
+### Access Points
+
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+## 🤖 AI Integration
+
+### OpenRouter Qwen3 Coder
+
+Restaceratops uses OpenRouter's Qwen3 Coder model for:
+
+- **Test Generation**: Create comprehensive test cases from API specifications
+- **Conversation**: Intelligent chat interface for API testing guidance
+- **Analysis**: Analyze API responses and provide insights
+- **Troubleshooting**: Debug API issues with AI assistance
+
+### Configuration
+
+The AI system is configured to use only OpenRouter Qwen3 Coder:
+
+```python
+# Single model configuration
+model = "qwen/qwen3-coder:free"
+api_key = os.getenv("OPENROUTER_API_KEY")
 ```
 
-**Unified Backend URLs:**
-- **🦖 Main Dashboard**: http://localhost:8000 (Comprehensive interface for all features)
-- **📚 API Documentation (Swagger)**: http://localhost:8000/docs
-- **🔍 API Documentation (ReDoc)**: http://localhost:8000/redoc
-- **💚 Health Check**: http://localhost:8000/health
-- **📊 Dashboard API**: http://localhost:8000/api/dashboard
-- **🤖 Chat API**: http://localhost:8000/api/chat
-- **🧪 Tests API**: http://localhost:8000/api/tests
-- **🔄 Workflow API**: http://localhost:8000/api/workflow
-- **🏢 Enterprise API**: http://localhost:8000/api/enterprise
-- **🔗 Jira Integration**: http://localhost:8000/api/jira
-- **📡 WebSocket**: ws://localhost:8000/ws
+## 📋 Usage
 
-## Option 2: Standard Backend
-```bash
-# Start the standard backend
-poetry run python start_backend.py
-```
+### 1. Dashboard
+View system statistics, recent tests, and overall health.
 
-**Standard Backend URLs:**
-- **Main API**: http://localhost:8000
-- **API Documentation (Swagger)**: http://localhost:8000/docs
-- **API Documentation (ReDoc)**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/health
-- **Dashboard API**: http://localhost:8000/api/dashboard
-- **Chat API**: http://localhost:8000/api/chat
-- **Tests API**: http://localhost:8000/api/tests
-- **Workflow API**: http://localhost:8000/api/workflow
-- **Enterprise API**: http://localhost:8000/api/enterprise
-- **Jira Integration**: http://localhost:8000/api/jira
-- **WebSocket**: ws://localhost:8000/ws
+### 2. AI Chat
+Interact with the AI agent for testing guidance and help.
 
-### Frontend Setup
-```bash
-cd frontend
+### 3. Test Generator
+Generate test cases from API specifications or URLs.
 
-# Install dependencies
-npm install
+### 4. Test Runner
+Execute tests and monitor results in real-time.
 
-# Start development server
-npm run dev
-```
+### 5. Test Monitor
+Track test execution progress and performance.
 
-**Frontend URLs:**
-- **Main Application**: http://localhost:5173
-- **Dashboard**: http://localhost:5173/
-- **AI Chat**: http://localhost:5173/chat
-- **Workflow**: http://localhost:5173/workflow
-- **Test Generator**: http://localhost:5173/test-generator
-- **Test Monitor**: http://localhost:5173/test-monitor
-- **Analytics**: http://localhost:5173/analytics
-- **Enterprise**: http://localhost:5173/enterprise
-- **Test Builder**: http://localhost:5173/test-builder
-- **Test Runner**: http://localhost:5173/test-runner
-- **Reports**: http://localhost:5173/reports
-- **Settings**: http://localhost:5173/settings
-
-### Development Commands
-
-#### Backend Commands
-```bash
-# Start unified backend (recommended - all features in one place)
-poetry run python start_unified_backend.py
-
-# Start standard backend
-poetry run python start_backend.py
-
-# Run backend tests
-poetry run python -m pytest backend/tests/ -v
-
-# Run specific test file
-poetry run python -m pytest backend/tests/test_api.py -v
-
-# Install new dependency
-poetry add package_name
-
-# Update dependencies
-poetry update
-
-# Show installed packages
-poetry show
-```
-
-#### Frontend Commands
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Run tests
-npm run test:run
-
-# Run tests in watch mode
-npm test
-
-# Run tests with UI
-npm run test:ui
-
-# Lint code
-npm run lint
-```
-
-### Quick Development Workflow
-```bash
-# Option 1: Use startup script (easiest)
-./start.sh
-
-# Option 2: Manual workflow
-# Terminal 1: Start Backend
-poetry run python start_backend.py
-
-# Terminal 2: Start Frontend
-cd frontend && npm run dev
-
-# Terminal 3: Run Tests (optional)
-poetry run python -m pytest backend/tests/ -v
-cd frontend && npm run test:run
-```
-
-### One-Command Startup
-```bash
-# Start everything with one command
-./start.sh
-
-# This will:
-# 1. Install all dependencies
-# 2. Start backend server
-# 3. Start frontend server
-# 4. Show all URLs
-# 5. Handle graceful shutdown with Ctrl+C
-```
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-# Run all backend tests
-poetry run python -m pytest backend/tests/ -v
-
-# Run specific test file
-poetry run python -m pytest backend/tests/test_api.py -v
-```
-
-### Frontend Tests
-```bash
-cd frontend
-
-# Run all frontend tests
-npm run test:run
-
-# Run tests in watch mode
-npm test
-```
-
-## 📋 API Endpoints
-
-### Core Endpoints
-- `GET /` - API information and status
-- `GET /health` - Health check
-- `GET /docs` - Interactive API documentation
-
-### Chat & AI
-- `POST /api/chat` - AI chat interface
-- `GET /api/chat/system-stats` - System statistics
-
-### Testing
-- `POST /api/tests/run` - Execute test suites
-- `POST /api/tests/load` - Load test configurations
-
-### Workflow
-- `GET /api/workflow/` - List workflows
-- `POST /api/workflow/` - Create workflow
-
-### Enterprise
-- `GET /api/enterprise/overview` - Enterprise dashboard
-- `GET /api/enterprise/platforms` - Platform configurations
-
-### Jira Integration
-- `POST /api/jira/connect` - Connect to Jira
-- `GET /api/jira/stories` - Get Jira stories
+### 6. Reports
+Generate detailed test reports and analytics.
 
 ## 🔧 Configuration
 
 ### Environment Variables
-Create a `.env` file in the project root:
 
 ```bash
-# AI Configuration
-OPENAI_API_KEY=your_openai_key
-OPENROUTER_API_KEY=your_openrouter_key
+# Required
+OPENROUTER_API_KEY=your-openrouter-api-key
 
-# Database
-DATABASE_URL=your_database_url
-
-# Security
-JWT_SECRET_KEY=your_jwt_secret
-
-# Backend Configuration
-BACKEND_HOST=0.0.0.0
-BACKEND_PORT=8000
-
-# Frontend Configuration
-VITE_API_BASE_URL=http://localhost:8000
-VITE_WS_URL=ws://localhost:8000/ws
+# Optional
+LOG_LEVEL=INFO
+PORT=8000
+FRONTEND_PORT=5173
 ```
 
-### Quick Environment Setup
-```bash
-# Create environment file
-cp .env.example .env  # if available
-# or create manually:
-touch .env
+### API Configuration
 
-# Edit with your API keys
-nano .env  # or use your preferred editor
+The backend provides RESTful APIs for:
+
+- `/api/chat` - AI chat interface
+- `/api/tests/run` - Test execution
+- `/api/dashboard` - System statistics
+- `/api/workflow/*` - Workflow management
+
+## 📊 Monitoring
+
+### Logs
+- Application logs: `conversation_logs.txt`
+- AI conversation logs: Detailed in conversation_logs.txt
+
+### Metrics
+- Test execution statistics
+- AI model usage
+- System performance metrics
+
+## 🛠️ Development
+
+### Backend Development
+
+```bash
+# Run backend in development mode
+poetry run python start_backend.py
+
+# Run tests
+poetry run pytest
 ```
 
-### Configuration Files
-- `pyproject.toml` - Python dependencies and project config
-- `frontend/package.json` - Node.js dependencies
-- `config/requirements.txt` - Additional Python requirements
+### Frontend Development
 
-## 🚀 Deployment
-
-### Docker Deployment
 ```bash
-# Build and run with Docker
-docker build -t restaceratops .
-docker run -p 8000:8000 restaceratops
-```
-
-### Vercel Deployment
-```bash
-# Deploy frontend to Vercel
+# Run frontend in development mode
 cd frontend
-vercel --prod
+npm run dev
 ```
 
-### AWS Lambda
+### Code Quality
+
 ```bash
-# Deploy backend to AWS Lambda
-cd deployments
-./deploy-serverless.sh
+# Format code
+poetry run black .
+poetry run isort .
+
+# Type checking
+poetry run mypy .
+
+# Linting
+poetry run flake8 .
 ```
 
-## 📊 Monitoring & Analytics
+## 📚 Documentation
 
-### Real-time Metrics
-- Test execution performance
-- API response times
-- Error rates and success rates
-- Resource utilization
+All documentation is organized in the `docs/` directory:
 
-### Reporting
-- Comprehensive test reports
-- Performance analytics
-- Compliance reports
-- Audit logs
-
-## 🔒 Security Features
-
-- **JWT Authentication** - Secure user authentication
-- **RBAC (Role-Based Access Control)** - Enterprise-grade permissions
-- **Audit Logging** - Comprehensive activity tracking
-- **Encryption** - Data encryption at rest and in transit
-- **Session Management** - Secure session handling
+- `docs/md/` - Markdown documentation files
+- API documentation available at `/docs` endpoint
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests for new functionality
+4. Add tests if applicable
 5. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## 🆘 Support
 
-- **Documentation**: Check the `/docs` directory
-- **Issues**: Report bugs and feature requests on GitHub
-- **Discussions**: Join community discussions
+For support and questions:
 
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### Backend Issues
-```bash
-# Port 8000 already in use
-lsof -ti:8000 | xargs kill -9
-
-# Poetry environment issues
-poetry env remove python
-poetry install
-
-# Missing dependencies
-poetry install --sync
-```
-
-#### Frontend Issues
-```bash
-# Port 5173 already in use
-lsof -ti:5173 | xargs kill -9
-
-# Node modules issues
-rm -rf node_modules package-lock.json
-npm install
-
-# Vite cache issues
-rm -rf node_modules/.vite
-npm run dev
-```
-
-#### Connection Issues
-- **Frontend can't connect to backend**: Ensure backend is running on port 8000
-- **CORS errors**: Backend CORS is configured for `http://localhost:5173`
-- **WebSocket connection failed**: Check if backend WebSocket endpoint is accessible
-
-### Health Checks
-```bash
-# Check backend health
-curl http://localhost:8000/health
-
-# Check frontend is serving
-curl http://localhost:5173
-
-# Test API endpoints
-curl http://localhost:8000/
-```
-
-## 🗺️ Roadmap
-
-- [ ] Enhanced AI model support
-- [ ] Advanced workflow automation
-- [ ] Mobile app development
-- [ ] Cloud-native deployment options
-- [ ] Advanced analytics and ML insights
-- [ ] Multi-language support
-- [ ] Plugin system for extensibility
+1. Check the documentation in `docs/md/`
+2. Review the API documentation at `/docs`
+3. Open an issue on GitHub
 
 ---
 
-**🦖 Built with ❤️ by the Restaceratops Team** 
+**Built with ❤️ using OpenRouter Qwen3 Coder** 

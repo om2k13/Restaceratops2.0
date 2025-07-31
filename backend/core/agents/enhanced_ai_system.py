@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🦖 Enhanced AI System for Restaceratops
-Advanced AI system with multi-model support, RAG integration, and context-aware responses
+Simplified AI system using OpenRouter with Qwen3 Coder model
 """
 
 import os
@@ -15,717 +15,217 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, AIMessage, SystemMessage
 from langchain.memory import ConversationBufferWindowMemory
 
-# Import free AI model support (OpenRouter handled separately)
-OLLAMA_AVAILABLE = False
-HUGGINGFACE_AVAILABLE = False
-
-# Import Gemini AI support
-try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
 from backend.core.models.vector_store import get_vector_store, setup_vector_store
-from backend.core.agents.rag_system import get_rag_system
 
 log = logging.getLogger("agent.enhanced_ai_system")
 
-class MultiProviderAI:
-    """Manages multiple AI providers with automatic fallback."""
+class OpenRouterAI:
+    """OpenRouter AI provider using Qwen3 Coder model."""
     
     def __init__(self):
-        self.providers = []
-        self.current_provider_index = 0
-        self.failed_providers = set()
+        self.api_key = os.getenv("OPENROUTER_API_KEY")
+        self.model = "qwen/qwen3-coder:free"
+        self.base_url = "https://openrouter.ai/api/v1"
         
-        # Initialize all available providers
-        self._initialize_providers()
-    
-    def _initialize_providers(self):
-        """Initialize AI providers: Gemini (Primary) and OpenRouter (Backup) - Free models only."""
-        
-        # 1. Gemini (Primary - Google AI - Free tier)
-        if GEMINI_AVAILABLE:
-            gemini_key = os.getenv("GOOGLE_API_KEY")
-            if gemini_key and gemini_key != "your-google-api-key-here":
-                self.providers.append({
-                    "name": "Gemini-AI",
-                    "type": "gemini",
-                    "api_key": gemini_key,
-                    "model": "gemini-1.5-flash",  # Free model: 15 req/min
-                    "priority": 1
-                })
-                log.info("✅ Gemini AI configured as primary provider (Free tier)")
-        
-        # 2. OpenRouter (Backup - Multiple free models)
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if openrouter_key and openrouter_key != "your-openrouter-api-key-here":
-            self.providers.append({
-                "name": "OpenRouter-AI",
-                "type": "openrouter",
-                "api_key": openrouter_key,
-                "model": "openai/gpt-3.5-turbo",  # Free model
-                "priority": 2
-            })
-            log.info("✅ OpenRouter AI configured as backup provider (Free models)")
-        
-        # Sort by priority
-        self.providers.sort(key=lambda x: x["priority"])
-        
-        if not self.providers:
-            log.warning("⚠️ No AI providers configured - system will use fallback responses")
+        if not self.api_key:
+            log.warning("⚠️ No OpenRouter API key configured")
         else:
-            log.info(f"🎯 Initialized {len(self.providers)} AI providers (Free models only)")
-            for provider in self.providers:
-                log.info(f"  - {provider['name']} ({provider['type']}) - Priority {provider['priority']}")
+            log.info(f"✅ OpenRouter AI configured with {self.model}")
     
-    def get_next_working_provider(self):
-        """Get the next working provider, skipping failed ones."""
-        attempts = 0
-        while attempts < len(self.providers):
-            provider = self.providers[self.current_provider_index]
-            
-            if provider["name"] not in self.failed_providers:
-                return provider
-            
-            # Move to next provider
-            self.current_provider_index = (self.current_provider_index + 1) % len(self.providers)
-            attempts += 1
-        
-        # If all providers failed, reset and try again
-        self.failed_providers.clear()
-        self.current_provider_index = 0
-        return self.providers[0] if self.providers else None
-    
-    def mark_provider_failed(self, provider_name: str):
-        """Mark a provider as failed."""
-        self.failed_providers.add(provider_name)
-        log.warning(f"Marked provider {provider_name} as failed")
-    
-    def create_llm(self, provider: Dict) -> Optional[Any]:
-        """Create an LLM instance for the given provider (Gemini or OpenRouter only)."""
-        try:
-            if provider["type"] == "gemini":
-                if GEMINI_AVAILABLE:
-                    return ChatGoogleGenerativeAI(
-                        model=provider.get("model", "gemini-1.5-flash"),
-                        google_api_key=provider["api_key"],
-                        temperature=0.7,
-                        max_output_tokens=4000,
-                        convert_system_message_to_human=True
-                    )
-                else:
-                    log.error("Gemini AI not available - missing dependencies")
-                    return None
-            
-            elif provider["type"] == "openrouter":
-                # For OpenRouter, we'll use the OpenRouterAISystem directly
-                # This ensures we get the free model fallback logic
-                from backend.core.agents.openrouter_ai_system import get_openrouter_ai_system
-                openrouter_system = get_openrouter_ai_system()
-                if openrouter_system.api_key:
-                    return openrouter_system
-                else:
-                    log.error("OpenRouter API key not configured")
-                    return None
-            
-        except Exception as e:
-            log.error(f"Failed to create LLM for {provider['name']}: {e}")
+    def create_llm(self) -> Optional[Any]:
+        """Create OpenRouter LLM instance."""
+        if not self.api_key:
             return None
         
-        return None
+        try:
+            return ChatOpenAI(
+                model=self.model,
+                openai_api_key=self.api_key,
+                openai_api_base=self.base_url,
+                temperature=0.7,
+                max_tokens=1000
+            )
+        except Exception as e:
+            log.error(f"Failed to create OpenRouter LLM: {e}")
+            return None
 
 class EnhancedAISystem:
-    """Advanced AI system for Restaceratops with multi-model support and RAG integration."""
+    """Enhanced AI system using OpenRouter with Qwen3 Coder."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", 
-                 use_free_models: bool = True, free_model_provider: str = "auto"):
+    def __init__(self):
         """Initialize the enhanced AI system."""
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.model = model
-        self.use_free_models = use_free_models
-        self.free_model_provider = free_model_provider
-        
-        # Initialize multi-provider AI system
-        self.multi_provider = MultiProviderAI()
-        
-        # Initialize AI models
-        self.models = {
-            'conversation': 'gpt-4o-mini',
-            'test_generation': 'gpt-4o',
-            'code_analysis': 'gpt-4o',
-            'troubleshooting': 'gpt-4o-mini'
-        }
-        
-        # Initialize LLM instances
-        self.llms = {}
+        self.openrouter_ai = OpenRouterAI()
+        self.conversation_memory = ConversationBufferWindowMemory(
+            k=10,
+            return_messages=True,
+            memory_key="chat_history"
+        )
         
         # Initialize vector store
-        self.vector_store = get_vector_store()
-        
-        # Initialize RAG system
-        self.rag_system = get_rag_system(api_key, self.models['conversation'])
-        
-        # Initialize conversation memory (using new LangChain memory system)
+        self.vector_store = None
         try:
-            from langchain_core.memory import ConversationBufferWindowMemory
-            self.conversation_memory = ConversationBufferWindowMemory(
-                k=10,  # Remember last 10 exchanges
-                return_messages=True
-            )
-        except ImportError:
-            # Fallback to old import if new one not available
-            from langchain.memory import ConversationBufferWindowMemory
-            self.conversation_memory = ConversationBufferWindowMemory(
-                k=10,  # Remember last 10 exchanges
-                return_messages=True
-            )
+            self.vector_store = get_vector_store()
+            log.info("✅ Vector store initialized")
+        except Exception as e:
+            log.warning(f"⚠️ Vector store initialization failed: {e}")
         
-        # System prompts for different tasks
-        self.system_prompts = {
-            'conversation': """You are Restaceratops, an AI-powered API testing agent with advanced capabilities.
-
-Your personality:
-- Friendly and helpful dinosaur-themed assistant
-- Expert in API testing and automation
-- Patient and thorough in explanations
-- Always provide actionable advice
-
-Your capabilities:
-- Test APIs and endpoints automatically
-- Generate comprehensive test cases
-- Analyze API specifications
-- Provide troubleshooting guidance
-- Create detailed reports
-- Explain complex concepts simply
-
-Always maintain your dinosaur theme with 🦖 emojis and be helpful!""",
-
-            'test_generation': """You are an expert API testing specialist. Generate comprehensive, production-ready test cases.
-
-Requirements:
-- Use YAML format for test definitions
-- Include positive and negative test scenarios
-- Test authentication, error handling, and edge cases
-- Use realistic test data
-- Follow API testing best practices
-- Include proper assertions and validations
-
-Generate tests that are:
-- Comprehensive and thorough
-- Easy to understand and maintain
-- Production-ready and reliable
-- Well-documented with clear descriptions""",
-
-            'troubleshooting': """You are an expert API testing troubleshooter. Provide detailed, actionable solutions.
-
-Your approach:
-- Identify the root cause of issues
-- Provide step-by-step solutions
-- Suggest preventive measures
-- Use clear, technical language
-- Include code examples when helpful
-- Consider security implications
-
-Always be thorough and helpful in your troubleshooting guidance.""",
-
-            'code_analysis': """You are an expert API code analyst. Analyze code and provide insights.
-
-Your analysis should include:
-- Code quality assessment
-- Security considerations
-- Performance implications
-- Best practices recommendations
-- Potential improvements
-- Testing strategy suggestions
-
-Provide clear, actionable feedback with examples."""
-        }
-        
-        log.info(f"Enhanced AI system initialized with {len(self.multi_provider.providers)} providers")
-    
-    async def _get_working_llm(self, task_type: str = 'conversation') -> Optional[Any]:
-        """Get a working LLM instance with automatic fallback."""
-        max_attempts = len(self.multi_provider.providers)
-        attempts = 0
-        
-        while attempts < max_attempts:
-            provider = self.multi_provider.get_next_working_provider()
-            if not provider:
-                break
-            
-            try:
-                log.info(f"Trying provider: {provider['name']}")
-                llm = self.multi_provider.create_llm(provider)
-                
-                if llm:
-                    # Test the LLM with a simple request
-                    test_message = "Hello"
-                    response = await llm.agenerate([[HumanMessage(content=test_message)]])
-                    
-                    if response and response.generations:
-                        log.info(f"Successfully connected to {provider['name']}")
-                        return llm
-                
-            except Exception as e:
-                log.warning(f"Provider {provider['name']} failed: {e}")
-                self.multi_provider.mark_provider_failed(provider['name'])
-            
-            attempts += 1
-        
-        log.error("All AI providers failed")
-        return None
+        log.info("Enhanced AI system initialized with OpenRouter Qwen3 Coder")
     
     async def handle_conversation(self, user_input: str) -> str:
-        """Handle user conversation with automatic provider fallback."""
+        """Handle user conversation using OpenRouter Qwen3 Coder."""
         try:
-            llm = await self._get_working_llm('conversation')
+            llm = self.openrouter_ai.create_llm()
+            if not llm:
+                return self._get_fallback_response(user_input)
             
-            if llm:
-                # Get conversation history
-                messages = self.conversation_memory.load_memory_variables({})
-                history = messages.get("history", [])
-                
-                # Add system prompt
-                all_messages = [SystemMessage(content=self.system_prompts['conversation'])]
-                all_messages.extend(history)
-                all_messages.append(HumanMessage(content=user_input))
-                
-                # Generate response
-                response = await llm.agenerate([all_messages])
-                
-                if response and response.generations:
-                    ai_response = response.generations[0][0].text
-                    
-                    # Update memory
-                    self.conversation_memory.save_context(
-                        {"input": user_input},
-                        {"output": ai_response}
-                    )
-                    
-                    return ai_response
+            # Get conversation history
+            chat_history = self.conversation_memory.chat_memory.messages
             
-            # Fallback to enhanced responses
-            return self._get_fallback_response(user_input)
+            # Create messages
+            messages = []
+            for msg in chat_history[-6:]:  # Last 6 messages for context
+                if isinstance(msg, HumanMessage):
+                    messages.append({"role": "user", "content": msg.content})
+                elif isinstance(msg, AIMessage):
+                    messages.append({"role": "assistant", "content": msg.content})
+            
+            # Add current user input
+            messages.append({"role": "user", "content": user_input})
+            
+            # Get response
+            response = await llm.agenerate([messages])
+            ai_response = response.generations[0][0].text
+            
+            # Update memory
+            self.conversation_memory.chat_memory.add_user_message(user_input)
+            self.conversation_memory.chat_memory.add_ai_message(ai_response)
+            
+            return ai_response
             
         except Exception as e:
             log.error(f"Error in conversation: {e}")
             return self._get_fallback_response(user_input)
     
     async def generate_intelligent_tests(self, api_spec: str, requirements: str) -> str:
-        """Generate intelligent test cases with automatic provider fallback."""
+        """Generate intelligent test cases using OpenRouter Qwen3 Coder."""
         try:
-            llm = await self._get_working_llm('test_generation')
+            llm = self.openrouter_ai.create_llm()
+            if not llm:
+                return self._get_fallback_test_template(api_spec)
             
-            if llm:
-                prompt = f"""Generate comprehensive API test cases for: {api_spec}
+            prompt = f"""Generate comprehensive API test cases for the following API specification:
 
-Requirements: {requirements}
+API Specification:
+{api_spec}
 
-Generate YAML test cases that include:
-- Health checks
-- Authentication tests
-- Error handling
-- Edge cases
-- Realistic test data
+Requirements:
+{requirements}
 
-Return only valid YAML, no markdown formatting."""
+Please provide:
+1. Test cases in YAML format
+2. Positive and negative test scenarios
+3. Edge cases and error handling
+4. Performance considerations
 
-                response = await llm.agenerate([[HumanMessage(content=prompt)]])
-                
-                if response and response.generations:
-                    return response.generations[0][0].text
-            
-            # Fallback to RAG system
-            return self.rag_system._get_fallback_test_generation(api_spec, requirements)
+Format the response clearly with explanations for each test case."""
+
+            response = await llm.agenerate([[{"role": "user", "content": prompt}]])
+            return response.generations[0][0].text
             
         except Exception as e:
             log.error(f"Error generating tests: {e}")
-            return self.rag_system._get_fallback_test_generation(api_spec, requirements)
-    
-    async def generate_troubleshooting_guide(self, error_description: str) -> str:
-        """Generate troubleshooting guide with automatic provider fallback."""
-        try:
-            llm = await self._get_working_llm('troubleshooting')
-            
-            if llm:
-                prompt = f"""Provide a detailed troubleshooting guide for this API testing issue:
-
-{error_description}
-
-Include:
-- Root cause analysis
-- Step-by-step solutions
-- Prevention strategies
-- Code examples if relevant
-
-Be thorough and actionable."""
-
-                response = await llm.agenerate([[HumanMessage(content=prompt)]])
-                
-                if response and response.generations:
-                    return response.generations[0][0].text
-            
-            # Fallback to RAG system
-            return self.rag_system._get_fallback_troubleshooting(error_description)
-            
-        except Exception as e:
-            log.error(f"Error generating troubleshooting: {e}")
-            return self.rag_system._get_fallback_troubleshooting(error_description)
+            return self._get_fallback_test_template(api_spec)
     
     def get_system_stats(self) -> Dict[str, Any]:
-        """Get system statistics including provider status."""
-        stats = {
-            "total_providers": len(self.multi_provider.providers),
-            "working_providers": len(self.multi_provider.providers) - len(self.multi_provider.failed_providers),
-            "failed_providers": list(self.multi_provider.failed_providers),
-            "current_provider": self.multi_provider.providers[self.multi_provider.current_provider_index]["name"] if self.multi_provider.providers else "None",
-            "providers": [
-                {
-                    "name": p["name"],
-                    "type": p["type"],
-                    "status": "working" if p["name"] not in self.multi_provider.failed_providers else "failed"
-                }
-                for p in self.multi_provider.providers
-            ]
+        """Get system statistics."""
+        return {
+            "provider": "OpenRouter",
+            "model": self.openrouter_ai.model,
+            "api_key_configured": bool(self.openrouter_ai.api_key),
+            "vector_store_available": self.vector_store is not None,
+            "memory_messages": len(self.conversation_memory.chat_memory.messages)
         }
-        return stats
     
     def _get_fallback_response(self, user_input: str) -> str:
-        """Enhanced fallback response when AI models are not available."""
-        user_input_lower = user_input.lower().strip()
-        
-        # Enhanced keyword-based responses
-        if any(word in user_input_lower for word in ['hello', 'hi', 'hey', 'greetings']):
-            return """🦖 Hello! I'm Restaceratops, your AI-powered API testing agent!
+        """Get fallback response when AI is unavailable."""
+        return f"""I'm currently experiencing technical difficulties with my AI system. 
 
-I can help you with:
-• 🧪 **API Testing**: Run comprehensive tests on your APIs
-• 📝 **Test Generation**: Create test cases from OpenAPI specs
-• 🔍 **Troubleshooting**: Debug API issues and errors
-• 📊 **Reporting**: Generate detailed test reports
-• 🛠️ **Automation**: Set up CI/CD testing pipelines
+However, I can still help you with API testing! Here are some general tips:
 
-**Quick Start:**
-• "Test my API at https://httpbin.org"
-• "Create tests for authentication"
-• "Show me test results"
-• "Help me debug a 500 error"
+🔧 **API Testing Basics:**
+- Test all HTTP methods (GET, POST, PUT, DELETE)
+- Verify status codes (200, 400, 401, 404, 500)
+- Check response data structure and content
+- Test with valid and invalid inputs
+- Monitor response times
 
-What would you like to work on today?"""
+📋 **What you asked:** {user_input}
 
-        elif any(word in user_input_lower for word in ['test', 'run', 'execute', 'check']):
-            if any(word in user_input_lower for word in ['api', 'endpoint', 'url']):
-                return """🧪 **API Testing Ready!**
-
-I can help you test your APIs! Here's what I can do:
-
-**Basic Testing:**
-• Health checks and status endpoints
-• Authentication flows
-• CRUD operations (GET, POST, PUT, DELETE)
-• Error handling and edge cases
-• Performance and response time validation
-
-**Advanced Features:**
-• Schema validation
-• Variable capture and reuse
-• Concurrent test execution
-• Custom assertions
-• Detailed reporting
-
-**To get started:**
-1. Tell me your API URL: "Test my API at https://your-api.com"
-2. I'll create and run comprehensive tests
-3. You'll get detailed results and recommendations
-
-**Example commands:**
-• "Test my API at https://httpbin.org"
-• "Create tests for user authentication"
-• "Run performance tests on my API"
-
-Would you like me to test a specific API?"""
-
-        elif any(word in user_input_lower for word in ['create', 'generate', 'make', 'write']):
-            if any(word in user_input_lower for word in ['test', 'case']):
-                return """📝 **Test Generation Ready!**
-
-I can create comprehensive test cases for your APIs! Here's what I generate:
-
-**Test Types:**
-• ✅ **Functional Tests**: Verify endpoints work correctly
-• 🔐 **Authentication Tests**: Test login, tokens, permissions
-• 🛡️ **Security Tests**: Validate input, check vulnerabilities
-• ⚡ **Performance Tests**: Measure response times
-• 🔄 **Integration Tests**: Test data flow between endpoints
-
-**Generation Methods:**
-• **From OpenAPI/Swagger specs** (recommended)
-• **From API URLs** (basic tests)
-• **From your descriptions** (custom scenarios)
-
-**To generate tests:**
-1. "Create tests from https://api.example.com/swagger.json"
-2. "Generate tests for user management endpoints"
-3. "Make authentication test cases"
-
-**Example:**
-• "Create tests from my OpenAPI spec"
-• "Generate tests for user CRUD operations"
-• "Make tests for OAuth2 authentication"
-
-What type of tests would you like me to create?"""
-
-        elif any(word in user_input_lower for word in ['help', 'what', 'how', 'explain']):
-            return """🦖 **Restaceratops Help Guide**
-
-I'm your AI-powered API testing assistant! Here's how I can help:
-
-**🎯 Core Capabilities:**
-• **API Testing**: Run comprehensive tests on any API
-• **Test Generation**: Create tests from OpenAPI specs
-• **Troubleshooting**: Debug API issues and errors
-• **Reporting**: Generate detailed test reports
-• **Automation**: Set up CI/CD testing pipelines
-
-**🚀 Quick Start Commands:**
-• "Test my API at https://your-api.com"
-• "Create tests from my OpenAPI spec"
-• "Show me test results"
-• "Help me debug a 500 error"
-
-**📚 Common Use Cases:**
-1. **New API Testing**: "Test my new API endpoints"
-2. **Authentication**: "Create tests for login/logout"
-3. **Performance**: "Run performance tests on my API"
-4. **Debugging**: "Help me fix this API error"
-5. **Documentation**: "Generate test documentation"
-
-**🛠️ Advanced Features:**
-• Schema validation
-• Variable capture and reuse
-• Concurrent test execution
-• Custom assertions
-• Multiple report formats (HTML, JUnit, Prometheus)
-
-**Need specific help?**
-• "How do I test authentication?"
-• "Explain JSON schema validation"
-• "What are API testing best practices?"
-
-What would you like to learn more about?"""
-
-        elif any(word in user_input_lower for word in ['error', 'debug', 'fix', 'troubleshoot']):
-            return """🔍 **API Troubleshooting Assistant**
-
-I can help you debug API issues! Here's what I can do:
-
-**Common Problems I Can Help With:**
-• 🚫 **4xx Errors**: Bad requests, authentication issues
-• ⚠️ **5xx Errors**: Server errors, timeouts
-• 🔐 **Authentication**: Token issues, permission problems
-• 📊 **Performance**: Slow responses, timeouts
-• 🔄 **Data Issues**: Invalid responses, schema mismatches
-
-**Debugging Process:**
-1. **Identify the Problem**: What error are you seeing?
-2. **Analyze the Context**: When does it happen?
-3. **Test Hypotheses**: Run targeted tests
-4. **Provide Solutions**: Fix recommendations
-
-**To get help:**
-• "Help me debug a 500 error"
-• "My API is returning 401 errors"
-• "Authentication is failing"
-• "Response times are too slow"
-
-**Example debugging session:**
-• "I'm getting 500 errors on POST requests"
-• "My API returns 401 for valid tokens"
-• "Response times are over 5 seconds"
-
-What specific issue are you experiencing?"""
-
-        elif any(word in user_input_lower for word in ['report', 'results', 'status', 'show']):
-            return """📊 **Test Results & Reporting**
-
-I can provide comprehensive test reports! Here's what I track:
-
-**📈 Metrics I Monitor:**
-• **Success Rate**: Percentage of passing tests
-• **Response Times**: Average, min, max latency
-• **Error Rates**: Types and frequency of failures
-• **Coverage**: Endpoints and scenarios tested
-• **Performance**: Throughput and load handling
-
-**📋 Report Types:**
-• **Console Reports**: Real-time test progress
-• **HTML Reports**: Beautiful, interactive dashboards
-• **JUnit XML**: CI/CD integration format
-• **Prometheus**: Metrics for monitoring systems
-
-**📊 What You'll See:**
-• Test execution progress
-• Pass/fail status for each test
-• Detailed error messages
-• Performance metrics
-• Recommendations for improvement
-
-**To view results:**
-• "Show me the test results"
-• "Generate a test report"
-• "What's the status of my tests?"
-• "Create an HTML report"
-
-**Example reports:**
-• "Tests completed: 15/15 passed"
-• "Average response time: 245ms"
-• "2 authentication tests failed"
-
-Would you like me to run tests and show you the results?"""
-
-        else:
-            return """🦖 **Restaceratops AI Assistant**
-
-I'm here to help with API testing and automation! Here are some things I can do:
-
-**🧪 Testing:**
-• Run comprehensive API tests
-• Generate test cases from OpenAPI specs
-• Validate responses and schemas
-• Test authentication and security
-
-**🔧 Development:**
-• Debug API issues
-• Optimize performance
-• Set up CI/CD pipelines
-• Create test documentation
-
-**📊 Analysis:**
-• Generate detailed reports
-• Analyze API performance
-• Identify potential issues
-• Provide improvement recommendations
-
-**Quick Commands:**
-• "Test my API at https://your-api.com"
-• "Create tests for authentication"
-• "Help me debug this error"
-• "Show me test results"
-
-What would you like to work on? I'm here to help make your API testing easier and more effective! 🚀"""
-
-        return self.rag_system._get_fallback_response(user_input)
+Would you like me to help you with specific API testing scenarios once the system is back online?"""
     
-    def _get_fallback_api_analysis(self, api_spec: str) -> str:
-        """Fallback API analysis when AI models are not available."""
-        return f"""🦖 API Specification Analysis
+    def _get_fallback_test_template(self, api_spec: str) -> str:
+        """Get fallback test template."""
+        return f"""# API Test Template
 
-**API Specification:**
-{api_spec[:200]}...
+## Test Cases for: {api_spec}
 
-**Basic Analysis:**
-• Review the API endpoints and methods
-• Check authentication requirements
-• Validate request/response formats
-• Test error handling scenarios
-• Verify documentation completeness
+### 1. Basic Functionality Tests
+```yaml
+- name: "Test basic GET request"
+  method: "GET"
+  url: "/api/endpoint"
+  expected_status: 200
+  validate:
+    - "response contains expected data"
+    - "response time < 1000ms"
+```
 
-**Recommended Testing:**
-• Create tests for each endpoint
-• Test authentication flows
-• Validate response schemas
-• Test error conditions
-• Performance testing
+### 2. Error Handling Tests
+```yaml
+- name: "Test invalid input"
+  method: "POST"
+  url: "/api/endpoint"
+  body: "{{invalid_data}}"
+  expected_status: 400
+  validate:
+    - "error message is clear"
+```
 
-**Next Steps:**
-• Generate comprehensive test cases
-• Set up automated testing
-• Monitor API performance
-• Document test results"""
-    
+### 3. Authentication Tests
+```yaml
+- name: "Test without authentication"
+  method: "GET"
+  url: "/api/protected-endpoint"
+  headers: {{}}
+  expected_status: 401
+```
 
+Please customize these templates based on your specific API requirements."""
     
     async def reset_system(self) -> str:
-        """Reset the enhanced AI system."""
+        """Reset the AI system."""
         try:
-            # Reset conversation memory
             self.conversation_memory.clear()
-            
-            # Reset vector store collections
-            await self.vector_store.reset_collections()
-            
-            # Reinitialize with default knowledge
-            await self.initialize_system()
-            
-            return "enhanced_ai_system_reset"
-            
+            return "✅ AI system reset successfully"
         except Exception as e:
             log.error(f"Error resetting system: {e}")
-            return f"error: {str(e)}"
+            return "❌ Failed to reset AI system"
 
-# Global enhanced AI system instance
-_enhanced_ai_system = None
-
-def get_enhanced_ai_system(api_key: Optional[str] = None) -> EnhancedAISystem:
-    """Get the global enhanced AI system instance."""
-    global _enhanced_ai_system
-    if _enhanced_ai_system is None:
-        _enhanced_ai_system = EnhancedAISystem(api_key)
-    return _enhanced_ai_system
+def get_enhanced_ai_system() -> EnhancedAISystem:
+    """Get enhanced AI system instance."""
+    return EnhancedAISystem()
 
 async def test_enhanced_ai_system():
-    """Test the enhanced AI system functionality."""
-    print("🦖 Testing Enhanced AI System...")
+    """Test the enhanced AI system."""
+    system = get_enhanced_ai_system()
     
-    # Initialize enhanced AI system
-    ai_system = get_enhanced_ai_system()
+    # Test conversation
+    response = await system.handle_conversation("Hello! Can you help me with API testing?")
+    print(f"Conversation Response: {response}")
     
-    # Initialize system
-    print("🔧 Initializing system...")
-    result = await ai_system.initialize_system()
-    print(f"Initialization result: {result}")
-    
-    # Test conversation handling
-    print("💬 Testing conversation handling...")
-    response = await ai_system.handle_conversation(
-        "How do I test API authentication?"
-    )
-    print(f"Response: {response[:100]}...")
-    
-    # Test intelligent test generation
-    print("🧪 Testing intelligent test generation...")
-    tests = await ai_system.generate_intelligent_tests(
-        "https://api.example.com",
-        "Test user authentication endpoints"
-    )
-    print(f"Generated tests: {tests[:100]}...")
-    
-    # Test API specification analysis
-    print("📊 Testing API specification analysis...")
-    analysis = await ai_system.analyze_api_specification(
-        "GET /users - Retrieve user list\nPOST /users - Create new user"
-    )
-    print(f"Analysis: {analysis[:100]}...")
-    
-    # Test troubleshooting
-    print("🔧 Testing troubleshooting...")
-    troubleshooting = await ai_system.generate_troubleshooting_guide(
-        "API returning 500 Internal Server Error"
-    )
-    print(f"Troubleshooting: {troubleshooting[:100]}...")
-    
-    # Get system stats
-    print("📊 Getting system stats...")
-    stats = await ai_system.get_system_stats()
+    # Test stats
+    stats = system.get_system_stats()
     print(f"System Stats: {stats}")
-    
-    print("✅ Enhanced AI system test completed!")
-
-def main():
-    """Main function for testing the enhanced AI system."""
-    asyncio.run(test_enhanced_ai_system())
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(test_enhanced_ai_system()) 

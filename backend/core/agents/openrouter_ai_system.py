@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 🦖 OpenRouter AI System for Restaceratops
-Multi-model AI system using OpenRouter with automatic fallback
+Single-model AI system using Qwen3 Coder from OpenRouter
+Upgraded to use OpenAI Python SDK for better integration
 """
 
 import os
@@ -10,7 +11,7 @@ import logging
 import json
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
-import httpx
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -18,124 +19,65 @@ load_dotenv()
 log = logging.getLogger("agent.openrouter_ai")
 
 class OpenRouterAISystem:
-    """Advanced AI system using OpenRouter with multiple free models and automatic fallback."""
+    """AI system using OpenRouter with Qwen3 Coder model only."""
     
     def __init__(self):
-        """Initialize the OpenRouter AI system."""
+        """Initialize the OpenRouter AI system with Qwen3 Coder only."""
+        from dotenv import load_dotenv
+        load_dotenv()
+        
         self.api_key = os.getenv("OPENROUTER_API_KEY")
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.current_model_index = 0
-        self.failed_models = set()
         
-        # List of free models to try (in order of preference)
-        self.free_models = [
-            "openai/gpt-3.5-turbo",           # Reliable, fast
-            "anthropic/claude-3-haiku",       # Good reasoning
-            "google/gemini-2.5-flash-lite",   # Fast responses
-            "qwen/qwen3-235b-a22b-2507:free", # High quality
-            "z-ai/glm-4.5-air",              # Good for tasks
-            "meta-llama/llama-3.1-8b-instruct", # Reliable
-            "microsoft/phi-3.5-mini-128k",   # Fast
-            "deepseek-ai/deepseek-coder-6.7b-instruct", # Good for code
-            "mistralai/mistral-7b-instruct", # Reliable
-            "nousresearch/nous-hermes-2-mixtral-8x7b-dpo" # High quality
-        ]
+        # Initialize OpenAI client for OpenRouter
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=self.api_key,
+        )
         
-        # Track usage for rate limiting
-        self.model_usage = {}
+        # Use ONLY Qwen3 Coder model
+        self.model = "qwen/qwen3-coder:free"
         
-        log.info(f"Initialized OpenRouter AI system with {len(self.free_models)} free models")
-    
-    def get_next_working_model(self) -> Optional[str]:
-        """Get the next working model, skipping failed ones."""
-        attempts = 0
-        while attempts < len(self.free_models):
-            model = self.free_models[self.current_model_index]
-            
-            if model not in self.failed_models:
-                return model
-            
-            # Move to next model
-            self.current_model_index = (self.current_model_index + 1) % len(self.free_models)
-            attempts += 1
-        
-        # If all models failed, reset and try again
-        self.failed_models.clear()
-        self.current_model_index = 0
-        return self.free_models[0] if self.free_models else None
-    
-    def mark_model_failed(self, model: str, reason: str = "unknown"):
-        """Mark a model as failed."""
-        self.failed_models.add(model)
-        log.warning(f"Marked model {model} as failed: {reason}")
+        log.info(f"Initialized OpenRouter AI system with Qwen3 Coder model: {self.model}")
     
     async def chat_completion(self, messages: List[Dict[str, str]], max_tokens: int = 1000) -> Optional[str]:
-        """Send a chat completion request with automatic fallback."""
+        """Send a chat completion request using Qwen3 Coder only."""
         if not self.api_key:
             log.error("No OpenRouter API key configured")
             return None
         
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        # Try each model until one works
-        for attempt in range(len(self.free_models)):
-            model = self.get_next_working_model()
-            if not model:
-                log.error("All models have failed")
-                return None
+        try:
+            # Use OpenAI SDK with OpenRouter
+            completion = self.client.chat.completions.create(
+                extra_headers={
+                    "HTTP-Referer": "https://restaceratops.com",
+                    "X-Title": "Restaceratops API Testing Agent"
+                },
+                extra_body={},
+                model=self.model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
             
-            payload = {
-                "model": model,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": 0.7
-            }
+            content = completion.choices[0].message.content
             
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(
-                        f"{self.base_url}/chat/completions",
-                        headers=headers,
-                        json=payload
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        content = result['choices'][0]['message']['content']
-                        
-                        # Success! Move to next model for next request
-                        self.current_model_index = (self.current_model_index + 1) % len(self.free_models)
-                        
-                        log.info(f"Successfully used model: {model}")
-                        return content
-                    
-                    elif response.status_code == 429:
-                        # Rate limited - mark as failed temporarily
-                        self.mark_model_failed(model, "rate_limited")
-                        log.warning(f"Rate limited on model: {model}")
-                    
-                    elif response.status_code == 402:
-                        # Payment required - mark as failed
-                        self.mark_model_failed(model, "payment_required")
-                        log.warning(f"Payment required for model: {model}")
-                    
-                    else:
-                        # Other error - mark as failed
-                        self.mark_model_failed(model, f"status_{response.status_code}")
-                        log.warning(f"Model {model} failed with status {response.status_code}")
-                
-            except Exception as e:
-                self.mark_model_failed(model, str(e))
-                log.error(f"Error with model {model}: {e}")
-        
-        log.error("All models failed")
-        return None
+            # Log detailed conversation for debugging
+            user_message = next((msg['content'] for msg in messages if msg['role'] == 'user'), 'Unknown')
+            log.info(f"=== AI Conversation Log ===")
+            log.info(f"Model: {self.model}")
+            log.info(f"User Input: {user_message}")
+            log.info(f"AI Response: {content}")
+            log.info(f"==========================")
+            
+            log.info(f"Successfully used Qwen3 Coder model")
+            return content
+            
+        except Exception as e:
+            log.error(f"Error with Qwen3 Coder model: {e}")
+            return None
     
     async def generate_api_tests(self, api_spec: str, requirements: str) -> str:
-        """Generate API tests using OpenRouter AI."""
+        """Generate API tests using Qwen3 Coder."""
         messages = [
             {
                 "role": "system",
@@ -175,7 +117,7 @@ Make it easy for non-technical users to understand what each test does and how t
             return self._get_fallback_test_template(api_spec)
     
     async def handle_conversation(self, user_input: str) -> str:
-        """Handle general conversation using OpenRouter AI."""
+        """Handle general conversation using Qwen3 Coder."""
         messages = [
             {
                 "role": "system",
@@ -215,10 +157,10 @@ Keep responses concise but informative and always user-friendly."""
         """Get system statistics."""
         return {
             "provider": "OpenRouter",
-            "total_models": len(self.free_models),
-            "working_models": len(self.free_models) - len(self.failed_models),
-            "failed_models": len(self.failed_models),
-            "current_model": self.free_models[self.current_model_index] if self.free_models else None,
+            "total_models": 1,
+            "working_models": 1,
+            "failed_models": 0,
+            "current_model": self.model,
             "api_key_configured": bool(self.api_key)
         }
     
@@ -283,7 +225,7 @@ def get_openrouter_ai_system() -> OpenRouterAISystem:
 
 async def test_openrouter_system():
     """Test the OpenRouter AI system."""
-    print("🦖 Testing OpenRouter AI System...")
+    print("🦖 Testing OpenRouter AI System with Qwen3 Coder...")
     
     ai = get_openrouter_ai_system()
     
