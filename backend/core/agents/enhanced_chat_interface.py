@@ -11,7 +11,9 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+from datetime import datetime
 import openai
+import httpx
 from backend.core.services.runner import run_suite
 from backend.core.services.dsl_loader import load_tests
 from backend.core.agents.openrouter_ai_system import get_openrouter_ai_system
@@ -77,8 +79,9 @@ class EnhancedRestaceratopsChat:
                 log.error(f"Error in greeting response: {e}")
                 return self._get_fallback_response(user_input)
         
-        # Check for API testing commands
-        elif any(word in user_input_lower for word in ['test', 'run', 'execute', 'check']):
+        # Check for API testing commands - more flexible detection
+        elif any(word in user_input_lower for word in ['test', 'run', 'execute', 'check']) or 'https://' in user_input_lower or 'http://' in user_input_lower:
+            log.info(f"Detected API testing request: {user_input}")
             return await self._handle_api_testing(user_input)
         
         # Check for test creation commands
@@ -113,9 +116,12 @@ class EnhancedRestaceratopsChat:
     async def _handle_api_testing(self, user_input: str) -> str:
         """Handle API testing requests."""
         try:
+            log.info(f"Handling API testing request: {user_input}")
             api_info = self._extract_api_info(user_input)
+            log.info(f"Extracted API info: {api_info}")
             
             if not api_info.get('base_url'):
+                log.info("No base URL found, returning help message")
                 return """🧪 **API Testing Ready!**
 
 I can help you test your APIs! Please provide the API URL:
@@ -135,22 +141,260 @@ I can help you test your APIs! Please provide the API URL:
 Please provide the API URL you'd like me to test!"""
 
             base_url = api_info['base_url']
+            log.info(f"Found base URL: {base_url}, executing tests")
             
-            # Use OpenRouter AI to generate test response
-            prompt = f"""I want to test the API at {base_url}. 
-
-Please help me understand:
-1. What endpoints should I test?
-2. What types of tests should I run?
-3. How should I approach testing this API?
-
-User request: {user_input}"""
-
-            return await self.openrouter_ai.handle_conversation(prompt)
+            # Actually execute API tests instead of just providing guidance
+            return await self._execute_api_tests(base_url, user_input)
             
         except Exception as e:
             log.error(f"Error in API testing: {e}")
             return self._get_fallback_response(user_input)
+    
+    async def _execute_api_tests(self, base_url: str, user_input: str) -> str:
+        """Hybrid approach: Try AI testing first, fall back to system logic if it fails."""
+        try:
+            log.info(f"Starting hybrid API testing for: {base_url}")
+            
+            # First, try AI-powered testing
+            ai_result = await self._try_ai_testing(base_url, user_input)
+            
+            # If AI testing fails or doesn't provide actual results, fall back to system logic
+            if self._should_fallback_to_system(ai_result):
+                log.info(f"AI testing failed, falling back to system logic for: {base_url}")
+                return await self._execute_system_tests(base_url, user_input)
+            
+            return ai_result
+            
+        except Exception as e:
+            log.error(f"Error in hybrid API testing: {e}")
+            # Fall back to system tests if anything goes wrong
+            return await self._execute_system_tests(base_url, user_input)
+    
+    async def _try_ai_testing(self, base_url: str, user_input: str) -> str:
+        """Try AI-powered API testing."""
+        try:
+            log.info(f"Attempting AI-powered testing for: {base_url}")
+            
+            prompt = f"""You are an API testing expert. I want you to ACTUALLY TEST the API at {base_url}.
+
+Please perform the following tasks:
+
+1. **Make actual HTTP requests** to test the API
+2. **Report real results** with actual status codes, response times, and data
+3. **Test multiple scenarios** including:
+   - Basic GET request to the main endpoint
+   - Different query parameters if supported
+   - Error handling scenarios
+   - Response structure validation
+
+4. **Provide a detailed report** with:
+   - Actual HTTP status codes received
+   - Response times in seconds
+   - Response body samples
+   - Any errors encountered
+   - Recommendations for further testing
+
+IMPORTANT: Do NOT just provide guidance. Actually make the HTTP requests and report the real results.
+
+User request: {user_input}
+
+Please start testing now and provide a comprehensive report with actual test results."""
+
+            return await self.openrouter_ai.handle_conversation(prompt)
+            
+        except Exception as e:
+            log.error(f"Error in AI testing: {e}")
+            raise e
+    
+    def _should_fallback_to_system(self, ai_result: str) -> bool:
+        """Determine if we should fall back to system testing based on AI result."""
+        # Check if AI result contains actual test results or just guidance
+        guidance_indicators = [
+            "guidance", "how to", "approach", "steps", "curl", "bash",
+            "let me help you", "here's how", "testing approach"
+        ]
+        
+        # Check if AI result contains actual HTTP results
+        actual_result_indicators = [
+            "status code", "response time", "actual result", "http", "200", "404", "500",
+            "response body", "headers", "duration"
+        ]
+        
+        ai_result_lower = ai_result.lower()
+        
+        # If it contains mostly guidance and few actual results, fall back
+        guidance_count = sum(1 for indicator in guidance_indicators if indicator in ai_result_lower)
+        actual_count = sum(1 for indicator in actual_result_indicators if indicator in ai_result_lower)
+        
+        log.info(f"AI result analysis - Guidance indicators: {guidance_count}, Actual results: {actual_count}")
+        
+        return guidance_count > actual_count or actual_count < 2
+    
+    async def _execute_system_tests(self, base_url: str, user_input: str) -> str:
+        """Execute system-based API tests as fallback."""
+        try:
+            log.info(f"Executing system tests for: {base_url}")
+            
+            # Create a comprehensive test suite for the API
+            test_suite = {
+                "name": f"System API Test for {base_url}",
+                "description": f"Comprehensive API testing for {base_url}",
+                "base_url": base_url,
+                "tests": [
+                    {
+                        "name": "Basic GET Request",
+                        "method": "GET",
+                        "url": base_url,
+                        "expected_status": 200,
+                        "timeout": 10
+                    },
+                    {
+                        "name": "Health Check",
+                        "method": "GET", 
+                        "url": f"{base_url}/health",
+                        "expected_status": [200, 404],  # Accept either 200 or 404
+                        "timeout": 10
+                    },
+                    {
+                        "name": "Status Endpoint",
+                        "method": "GET",
+                        "url": f"{base_url}/status", 
+                        "expected_status": [200, 404],
+                        "timeout": 10
+                    },
+                    {
+                        "name": "API Documentation",
+                        "method": "GET",
+                        "url": f"{base_url}/docs",
+                        "expected_status": [200, 404],
+                        "timeout": 10
+                    },
+                    {
+                        "name": "OpenAPI Spec",
+                        "method": "GET",
+                        "url": f"{base_url}/openapi.json",
+                        "expected_status": [200, 404],
+                        "timeout": 10
+                    }
+                ]
+            }
+            
+            # Add parameter tests if it's a REST API
+            if "api" in base_url.lower():
+                test_suite["tests"].extend([
+                    {
+                        "name": "Query Parameter Test",
+                        "method": "GET",
+                        "url": f"{base_url}?test=1",
+                        "expected_status": [200, 400, 404],
+                        "timeout": 10
+                    }
+                ])
+            
+            results = []
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                for test in test_suite["tests"]:
+                    test_result = await self._run_single_test(client, test)
+                    results.append(test_result)
+            
+            # Format the results
+            return self._format_test_results(base_url, results, "System Tests")
+            
+        except Exception as e:
+            log.error(f"Error executing system tests: {e}")
+            return f"❌ **Error executing system tests for {base_url}**: {str(e)}"
+    
+    async def _run_single_test(self, client, test_config: dict) -> dict:
+        """Run a single API test."""
+        start_time = datetime.now()
+        test_name = test_config["name"]
+        method = test_config["method"]
+        url = test_config["url"]
+        expected_status = test_config["expected_status"]
+        timeout = test_config.get("timeout", 10)
+        
+        try:
+            log.info(f"Running system test: {test_name} - {method} {url}")
+            
+            response = await client.request(
+                method=method,
+                url=url,
+                timeout=timeout
+            )
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # Check if status is expected
+            if isinstance(expected_status, list):
+                status_ok = response.status_code in expected_status
+            else:
+                status_ok = response.status_code == expected_status
+            
+            return {
+                "name": test_name,
+                "method": method,
+                "url": url,
+                "status": "✅ PASSED" if status_ok else "❌ FAILED",
+                "status_code": response.status_code,
+                "expected_status": expected_status,
+                "duration": round(duration, 3),
+                "response_size": len(response.content),
+                "headers": dict(response.headers)
+            }
+            
+        except Exception as e:
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            return {
+                "name": test_name,
+                "method": method,
+                "url": url,
+                "status": "❌ ERROR",
+                "status_code": None,
+                "expected_status": expected_status,
+                "duration": round(duration, 3),
+                "error": str(e)
+            }
+    
+    def _format_test_results(self, base_url: str, results: list, test_type: str = "API Tests") -> str:
+        """Format test results into a readable response."""
+        response = f"# 🧪 {test_type} Results for {base_url}\n\n"
+        
+        passed = sum(1 for r in results if "PASSED" in r["status"])
+        failed = sum(1 for r in results if "FAILED" in r["status"])
+        errors = sum(1 for r in results if "ERROR" in r["status"])
+        
+        response += f"## 📊 Summary\n"
+        response += f"- ✅ **Passed**: {passed}\n"
+        response += f"- ❌ **Failed**: {failed}\n"
+        response += f"- ⚠️ **Errors**: {errors}\n\n"
+        
+        response += "## 🔍 Detailed Results\n\n"
+        
+        for result in results:
+            response += f"### {result['name']}\n"
+            response += f"- **Method**: {result['method']}\n"
+            response += f"- **URL**: `{result['url']}`\n"
+            response += f"- **Status**: {result['status']}\n"
+            
+            if result.get('status_code'):
+                response += f"- **Response Code**: {result['status_code']}\n"
+                if isinstance(result.get('expected_status'), list):
+                    response += f"- **Expected**: {result['expected_status']}\n"
+                else:
+                    response += f"- **Expected**: {result.get('expected_status')}\n"
+            
+            response += f"- **Duration**: {result['duration']}s\n"
+            response += f"- **Response Size**: {result.get('response_size', 0)} bytes\n"
+            
+            if result.get('error'):
+                response += f"- **Error**: {result['error']}\n"
+            
+            response += "\n"
+        
+        return response
     
     def _get_test_endpoints(self, base_url: str) -> list:
         """Get common test endpoints for an API."""
