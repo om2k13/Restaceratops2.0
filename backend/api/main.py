@@ -4,6 +4,10 @@
 Focused on core API testing functionality with AI capabilities
 """
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -14,7 +18,6 @@ import json
 import logging
 from contextlib import asynccontextmanager
 import uvicorn
-import os
 
 # Import core services
 from core.agents.enhanced_ai_system import EnhancedAISystem
