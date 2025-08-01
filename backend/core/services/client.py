@@ -1,5 +1,5 @@
 
-import httpx, os, asyncio, logging, tenacity
+import httpx, os, asyncio, logging
 from typing import Optional
 
 log = logging.getLogger("agent.client")
@@ -17,18 +17,23 @@ class APIClient:
             hdrs["Authorization"] = f"Bearer {self.token}"
         return hdrs
 
-    @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=0.5, min=1, max=10),
-        stop=tenacity.stop_after_attempt(3),
-        reraise=True
-    )
     async def request(self, method: str, path: str, **kwargs):
+        """Make HTTP request with simple retry logic."""
         # If path is a full URL, use it directly; otherwise combine with base_url
         if path.startswith(('http://', 'https://')):
             url = path
         else:
             url = self.base_url.rstrip("/") + path
-        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-            resp = await client.request(method.upper(), url, headers=self._headers(), **kwargs)
-            log.debug("HTTP %s %s -> %s", method, url, resp.status_code)
-            return resp
+        
+        # Simple retry logic (3 attempts)
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
+                    resp = await client.request(method.upper(), url, headers=self._headers(), **kwargs)
+                    log.debug("HTTP %s %s -> %s", method, url, resp.status_code)
+                    return resp
+            except Exception as e:
+                if attempt == 2:  # Last attempt
+                    raise e
+                log.warning(f"Request failed (attempt {attempt + 1}/3): {e}")
+                await asyncio.sleep(0.5 * (2 ** attempt))  # Exponential backoff
