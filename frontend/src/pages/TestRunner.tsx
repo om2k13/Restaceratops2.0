@@ -1,410 +1,358 @@
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { apiService } from '../services/api';
-import { websocketService } from '../services/websocket';
-import type { TestExecutionRequest, TestExecutionStatus } from '../services/api';
-import type { TestCompleted } from '../services/websocket';
 
-interface TestExecution {
-  id: string;
-  name: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  progress: number;
-  startTime: Date;
-  endTime?: Date;
-  duration?: number;
-  results?: any[];
+interface TestResult {
+  test_name: string;
+  status: string;
+  response_time: number;
+  response_code: number;
+  response_body: string;
   error?: string;
-  executionId?: string;
+  timestamp: string;
 }
 
-const TestRunner = () => {
-  const [availableTests, setAvailableTests] = useState<any[]>([]);
-  const [selectedTests, setSelectedTests] = useState<string[]>([]);
-  const [executions, setExecutions] = useState<TestExecution[]>([]);
+interface TestExecutionResult {
+  execution_id: string;
+  status: string;
+  total_tests: number;
+  passed_tests: number;
+  failed_tests: number;
+  success_rate: number;
+  avg_response_time: number;
+  results: TestResult[];
+  test_file: string;
+  timestamp: string;
+}
+
+const CleanTestRunner: React.FC = () => {
+  const [testFile, setTestFile] = useState('tests/simple_test.yml');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [results, setResults] = useState<TestExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
-  const [parallelExecution, setParallelExecution] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
-  useEffect(() => {
-    const fetchAvailableTests = async () => {
-      try {
-        setLoading(true);
-        const response = await apiService.getTestSpecifications();
-        setAvailableTests(response.test_specifications || []);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load available tests');
-        console.error('Load tests error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const availableTestFiles = [
+    'tests/simple_test.yml',
+    'tests/comprehensive_test.yml',
+    'tests/real-world-example.yml',
+    'tests/production_ready.yml',
+    'tests/generated_openrouter.yml'
+  ];
 
-    fetchAvailableTests();
-  }, []);
-
-  useEffect(() => {
-    // Set up WebSocket connection for real-time updates
-    const connectWebSocket = async () => {
-      try {
-        await websocketService.connect();
-        setConnectionStatus('connected');
-        
-        // Subscribe to test completion messages
-        const unsubscribeTestCompleted = websocketService.subscribeToTestCompleted((message: TestCompleted) => {
-          const testData = message.data;
-          setExecutions(prev => prev.map(exec => {
-            if (exec.executionId === testData.execution_id) {
-              return {
-                ...exec,
-                status: 'completed',
-                endTime: new Date(),
-                duration: new Date().getTime() - exec.startTime.getTime(),
-                results: testData.results,
-                progress: 100
-              };
-            }
-            return exec;
-          }));
-          
-          setIsRunning(false);
-        });
-
-        // Subscribe to pong messages for connection monitoring
-        const unsubscribePong = websocketService.subscribeToPong(() => {
-          setConnectionStatus('connected');
-        });
-
-        // Set up connection status monitoring
-        const statusInterval = setInterval(() => {
-          setConnectionStatus(websocketService.getConnectionStatus());
-        }, 5000);
-
-        return () => {
-          unsubscribeTestCompleted();
-          unsubscribePong();
-          clearInterval(statusInterval);
-          websocketService.disconnect();
-        };
-      } catch (error) {
-        console.error('WebSocket connection failed:', error);
-        setConnectionStatus('disconnected');
-        return () => {};
-      }
-    };
-
-    const cleanup = connectWebSocket();
-
-    return () => {
-      cleanup.then(cleanupFn => cleanupFn && cleanupFn());
-    };
-  }, []);
-
-  const toggleTestSelection = (testName: string) => {
-    setSelectedTests(prev => 
-      prev.includes(testName) 
-        ? prev.filter(name => name !== testName)
-        : [...prev, testName]
-    );
-  };
-
-  const runSelectedTests = async () => {
-    if (selectedTests.length === 0) {
-      setError('Please select at least one test to run');
+  const runTests = async () => {
+    if (!testFile && !uploadedFile) {
+      setError('Please select a test file or upload one');
       return;
     }
 
     setIsRunning(true);
     setError(null);
+    setResults(null);
+    setShowReport(false);
 
     try {
-      // Create execution request
-      const request: TestExecutionRequest = {
-        test_files: selectedTests,
-        parallel: parallelExecution,
-        timeout: 30000
-      };
-
-      // Start test execution
-      const response = await apiService.runTests(request);
+      let fileToUse = testFile;
       
-      // Create execution entries for selected tests
-      const newExecutions: TestExecution[] = selectedTests.map(testName => ({
-        id: Date.now().toString() + Math.random(),
-        name: testName,
-        status: 'pending',
-        progress: 0,
-        startTime: new Date(),
-        executionId: response.execution_id
-      }));
+      // If user uploaded a file, use that instead
+      if (uploadedFile) {
+        // For now, we'll use the uploaded file name
+        // In a real implementation, you'd upload the file to the backend
+        fileToUse = uploadedFile.name;
+      }
 
-      setExecutions(prev => [...prev, ...newExecutions]);
+      // Call the backend directly - it returns results immediately
+      const response = await apiService.runTests({
+        test_files: [fileToUse],
+        parallel: true,
+        timeout: 30000
+      });
 
-      // Start polling for execution status updates
-      const stopPolling = await apiService.pollExecutionStatus(
-        response.execution_id,
-        (status: TestExecutionStatus) => {
-          setExecutions(prev => prev.map(exec => {
-            if (exec.executionId === status.execution_id) {
-              return {
-                ...exec,
-                status: status.status,
-                progress: status.progress,
-                endTime: status.end_time ? new Date(status.end_time) : undefined,
-                duration: status.end_time ? new Date(status.end_time).getTime() - exec.startTime.getTime() : undefined,
-                results: status.results,
-                error: status.error
-              };
-            }
-            return exec;
-          }));
-
-          // Check if all executions are complete
-          const allComplete = status.status === 'completed' || status.status === 'failed';
-          if (allComplete) {
-            setIsRunning(false);
-            stopPolling();
-          }
-        },
-        1000 // Poll every second
-      );
-
-      setSelectedTests([]);
+      // The backend returns results directly, no need to poll
+      const formattedResults: TestExecutionResult = {
+        execution_id: response.execution_id,
+        status: response.status,
+        total_tests: response.total_tests,
+        passed_tests: response.passed_tests,
+        failed_tests: response.failed_tests,
+        success_rate: response.success_rate,
+        avg_response_time: response.avg_response_time,
+        results: response.results.map((r: any) => ({
+          test_name: r.test_name,
+          status: r.status,
+          response_time: r.response_time,
+          response_code: r.response_code,
+          response_body: r.response_body,
+          error: r.error,
+          timestamp: r.timestamp
+        })),
+        test_file: fileToUse,
+        timestamp: response.timestamp
+      };
+      
+      setResults(formattedResults);
+      setShowReport(true);
+      setIsRunning(false);
+      
     } catch (err) {
-      setError('Failed to run tests. Please try again.');
-      console.error('Run tests error:', err);
+      console.error('Test execution error:', err);
+      setError('Failed to execute tests');
       setIsRunning(false);
     }
   };
 
-  const clearExecutions = () => {
-    setExecutions([]);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-gray-500';
-      case 'running': return 'bg-blue-500';
-      case 'completed': return 'bg-success-500';
-      case 'failed': return 'bg-error-500';
-      default: return 'bg-gray-500';
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      setTestFile(''); // Clear dropdown selection
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Pending';
-      case 'running': return 'Running';
-      case 'completed': return 'Completed';
-      case 'failed': return 'Failed';
-      default: return 'Unknown';
-    }
+  const generateReport = () => {
+    if (!results) return '';
+
+    const report = `
+# 🦖 Restaceratops Test Report
+
+**Execution ID:** ${results.execution_id}
+**Test File:** ${results.test_file}
+**Timestamp:** ${new Date(results.timestamp).toLocaleString()}
+
+## 📊 Summary
+- **Total Tests:** ${results.total_tests}
+- **Passed:** ${results.passed_tests}
+- **Failed:** ${results.failed_tests}
+- **Success Rate:** ${results.success_rate.toFixed(1)}%
+- **Average Response Time:** ${results.avg_response_time.toFixed(0)}ms
+
+## 📋 Detailed Results
+
+${results.results.map((result, index) => `
+### Test ${index + 1}: ${result.test_name}
+- **Status:** ${result.status}
+- **Response Time:** ${result.response_time}ms
+- **Response Code:** ${result.response_code}
+${result.error ? `- **Error:** ${result.error}` : ''}
+`).join('')}
+
+## 🎯 Recommendations
+${results.success_rate >= 90 ? '✅ Excellent test performance!' : 
+  results.success_rate >= 70 ? '⚠️ Some tests failed. Review failed tests.' : 
+  '❌ Multiple test failures. Investigate API issues.'}
+    `;
+
+    return report;
   };
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'bg-success-500';
-      case 'connecting': return 'bg-warning-500';
-      case 'disconnected': return 'bg-error-500';
-      default: return 'bg-gray-500';
-    }
+  const downloadReport = () => {
+    const report = generateReport();
+    const blob = new Blob([report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `restaceratops-report-${results?.execution_id}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'Real-time Connected';
-      case 'connecting': return 'Connecting...';
-      case 'disconnected': return 'Real-time Disconnected';
-      default: return 'Unknown';
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Test Runner</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Execute and monitor API tests in real-time
-          </p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${getConnectionStatusColor()} animate-pulse`}></div>
-            <span className="text-sm text-gray-600">{getConnectionStatusText()}</span>
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">🧪 Test Runner</h1>
+        <p className="text-gray-600">Execute API tests and generate comprehensive reports</p>
+      </div>
+
+      {/* Test Configuration */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Test Configuration</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="testFile" className="block text-sm font-medium text-gray-700 mb-2">
+              Test File
+            </label>
+            <select
+              id="testFile"
+              value={testFile}
+              onChange={(e) => setTestFile(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              disabled={!!uploadedFile}
+            >
+              {availableTestFiles.map((file) => (
+                <option key={file} value={file}>
+                  {file}
+                </option>
+              ))}
+            </select>
           </div>
+          
+          <div className="border-t pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Or Upload Custom Test File
+            </label>
+            <div className="flex items-center space-x-4">
+              <input
+                type="file"
+                accept=".yml,.yaml"
+                onChange={handleFileUpload}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+              {uploadedFile && (
+                <button
+                  onClick={() => {
+                    setUploadedFile(null);
+                    setTestFile('tests/simple_test.yml');
+                  }}
+                  className="px-3 py-2 text-sm text-red-600 hover:text-red-800"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {uploadedFile && (
+              <p className="mt-2 text-sm text-green-600">
+                ✅ Using uploaded file: {uploadedFile.name}
+              </p>
+            )}
+          </div>
+
           <button
-            onClick={clearExecutions}
-            className="btn-secondary text-sm"
+            onClick={runTests}
+            disabled={isRunning}
+            className={`w-full px-4 py-2 text-white font-medium rounded-md ${
+              isRunning
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500'
+            }`}
           >
-            Clear History
+            {isRunning ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Running Tests...
+              </div>
+            ) : (
+              'Run Tests'
+            )}
           </button>
         </div>
       </div>
 
+      {/* Error Display */}
       {error && (
-        <div className="bg-error-50 border border-error-200 text-error-800 px-4 py-3 rounded-lg">
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <div className="mt-2 text-sm text-red-700">{error}</div>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Test Selection */}
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Tests</h3>
-          
-          {availableTests.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <p className="text-sm">No test files found</p>
-              <p className="text-xs">Create tests in the Test Builder first</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {availableTests.map((test) => (
-                <div
-                  key={test.name}
-                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                    selectedTests.includes(test.name)
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => toggleTestSelection(test.name)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedTests.includes(test.name)}
-                        onChange={() => toggleTestSelection(test.name)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {test.name}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {test.path}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                checked={parallelExecution}
-                onChange={(e) => setParallelExecution(e.target.checked)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="ml-2 text-sm text-gray-700">Run tests in parallel</span>
-            </div>
+      {/* Results */}
+      {results && (
+        <div className="space-y-6">
+          {/* Summary */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Test Results Summary</h2>
             
-            <button
-              onClick={runSelectedTests}
-              disabled={isRunning || selectedTests.length === 0}
-              className="w-full btn-primary"
-            >
-              {isRunning ? 'Running Tests...' : `Run ${selectedTests.length} Selected Test${selectedTests.length !== 1 ? 's' : ''}`}
-            </button>
-          </div>
-        </div>
-
-        {/* Execution History */}
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Execution History</h3>
-          
-          {executions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{results.total_tests}</div>
+                <div className="text-sm text-gray-500">Total Tests</div>
               </div>
-              <p className="text-sm">No test executions yet</p>
-              <p className="text-xs">Select and run tests to see execution history</p>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{results.passed_tests}</div>
+                <div className="text-sm text-gray-500">Passed</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">{results.failed_tests}</div>
+                <div className="text-sm text-gray-500">Failed</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{results.success_rate.toFixed(1)}%</div>
+                <div className="text-sm text-gray-500">Success Rate</div>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {executions.map((execution) => (
-                <div key={execution.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${getStatusColor(execution.status)}`}></div>
-                      <span className="text-sm font-medium text-gray-900">
-                        {execution.name}
-                      </span>
-                      <span className={`px-2 py-1 text-xs font-semibold rounded ${getStatusColor(execution.status)} text-white`}>
-                        {getStatusText(execution.status)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {execution.startTime.toLocaleTimeString()}
-                    </div>
-                  </div>
 
-                  {/* Progress Bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        execution.status === 'completed' ? 'bg-success-500' :
-                        execution.status === 'failed' ? 'bg-error-500' :
-                        execution.status === 'running' ? 'bg-blue-500' : 'bg-gray-500'
-                      }`}
-                      style={{ width: `${execution.progress}%` }}
-                    ></div>
-                  </div>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setShowReport(!showReport)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                {showReport ? 'Hide' : 'Show'} Detailed Report
+              </button>
+              <button
+                onClick={downloadReport}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Download Report
+              </button>
+            </div>
+          </div>
 
-                  {/* Execution Details */}
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div>Progress: {execution.progress}%</div>
-                    {execution.duration && (
-                      <div>Duration: {execution.duration}ms</div>
-                    )}
-                    {execution.results && execution.results.length > 0 && (
-                      <div className="mt-2 p-2 bg-gray-50 rounded">
-                        <div className="font-medium mb-1">Results:</div>
-                        {execution.results.map((result, index) => (
-                          <div key={index} className="text-xs">
-                            • {result.test_name || result.name || 'Unknown'}: {result.status} 
-                            {result.response_time && ` (${result.response_time}ms)`}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {execution.error && (
-                      <div className="text-error-600 mt-2">
-                        Error: {execution.error}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {/* Detailed Results */}
+          {showReport && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Detailed Test Results</h2>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Test Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Response Time</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Response Code</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {results.results.map((result, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {result.test_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            result.status === 'passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {result.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {result.response_time}ms
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {result.response_code}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {result.error ? (
+                            <span className="text-red-600">{result.error}</span>
+                          ) : (
+                            <span className="text-green-600">Success</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 };
 
-export default TestRunner; 
+export default CleanTestRunner; 

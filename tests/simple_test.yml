@@ -1,0 +1,30 @@
+- name: "Health Check Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/status/200"
+  expect:
+    status: 200
+
+- name: "JSON Response Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/json"
+  expect:
+    status: 200
+    json:
+      slideshow:
+        author: "Yours Truly"
+
+- name: "POST Request Test"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    json:
+      test: "data"
+      number: 42
+  expect:
+    status: 200
+    json:
+      json:
+        test: "data"
+        number: 42 

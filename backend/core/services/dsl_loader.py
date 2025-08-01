@@ -36,12 +36,26 @@ class Step:
             self.context[var] = value
             log.debug("Saved %s = %s", var, value)
 
-def load_tests(directory: Union[str, Path]):
-    tests = []
-    for file in Path(directory).glob("**/*.yml"):
-        with open(file, "r") as f:
+def load_tests(file_path: Union[str, Path]):
+    """Load tests from a single file or directory"""
+    path = Path(file_path)
+    
+    if path.is_file():
+        # Load single file
+        with open(path, "r") as f:
             data = yaml.safe_load(f)
             if not isinstance(data, list):
-                raise ValueError(f"{file} must contain a list of steps")
-            tests.append((file.name, data))
-    return tests
+                raise ValueError(f"{path} must contain a list of steps")
+            return [(path.name, data)]
+    elif path.is_dir():
+        # Load all yml files from directory
+        tests = []
+        for file in path.glob("**/*.yml"):
+            with open(file, "r") as f:
+                data = yaml.safe_load(f)
+                if not isinstance(data, list):
+                    raise ValueError(f"{file} must contain a list of steps")
+                tests.append((file.name, data))
+        return tests
+    else:
+        raise FileNotFoundError(f"Test file or directory not found: {file_path}")

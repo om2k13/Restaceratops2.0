@@ -13,10 +13,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import httpx
+import yaml
+from pathlib import Path
 from pydantic import BaseModel
 
-from backend.core.services.client import APIClient
-from backend.core.services.assertions import run_assertions, AssertionErrorDetails
+from core.services.client import APIClient
+from core.services.assertions import run_assertions, AssertionErrorDetails
 
 log = logging.getLogger("restaceratops.runner")
 
@@ -226,6 +228,9 @@ class TestRunner:
         try:
             # Prepare test request
             request_config = test_config.get("request", {})
+            if not isinstance(request_config, dict):
+                raise ValueError(f"Request config must be a dict, got {type(request_config)}")
+            
             method = request_config.get("method", "GET")
             url = request_config.get("url", "")
             
@@ -236,10 +241,14 @@ class TestRunner:
             headers = {**context.headers, **request_config.get("headers", {})}
             headers = {k: self._resolve_variables(v, context.variables) for k, v in headers.items()}
             
-            # Prepare body
+            # Prepare body - handle both 'body' and 'json' fields
             body = request_config.get("body", {})
+            json_data = request_config.get("json", None)
+            
             if isinstance(body, dict):
                 body = {k: self._resolve_variables(v, context.variables) for k, v in body.items()}
+            elif isinstance(body, str):
+                body = self._resolve_variables(body, context.variables)
             
             # Execute request
             start_time = time.time()
@@ -259,18 +268,46 @@ class TestRunner:
             result.response_code = response.status_code
             result.response_body = response.text[:1000]  # Limit response body length
             
-            # Run assertions
-            assertions = test_config.get("assertions", [])
+            # Run assertions from expect block (DSL format)
+            expect_config = test_config.get("expect", {})
             passed_assertions = 0
             failed_assertions = 0
             
-            for assertion in assertions:
-                try:
-                    run_assertions(response, [assertion])
-                    passed_assertions += 1
-                except AssertionErrorDetails as e:
-                    failed_assertions += 1
-                    log.warning(f"Assertion failed in {test_name}: {e}")
+            try:
+                # Status code assertion
+                if "status" in expect_config:
+                    expected_status = expect_config["status"]
+                    if response.status_code == expected_status:
+                        passed_assertions += 1
+                    else:
+                        failed_assertions += 1
+                        log.warning(f"Status assertion failed in {test_name}: expected {expected_status}, got {response.status_code}")
+                
+                # JSON assertions
+                if "json" in expect_config:
+                    try:
+                        response_json = response.json()
+                        expected_json = expect_config["json"]
+                        for key, value in expected_json.items():
+                            if key in response_json and response_json[key] == value:
+                                passed_assertions += 1
+                            else:
+                                failed_assertions += 1
+                                log.warning(f"JSON assertion failed in {test_name}: key '{key}' mismatch")
+                    except Exception as e:
+                        failed_assertions += 1
+                        log.warning(f"JSON parsing failed in {test_name}: {e}")
+                
+                # If no specific assertions, just check if request was successful
+                if not expect_config:
+                    if 200 <= response.status_code < 300:
+                        passed_assertions += 1
+                    else:
+                        failed_assertions += 1
+                
+            except Exception as e:
+                failed_assertions += 1
+                log.warning(f"Assertion error in {test_name}: {e}")
             
             result.assertions_passed = passed_assertions
             result.assertions_failed = failed_assertions
@@ -404,31 +441,128 @@ test_runner = TestRunner()
 async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
     """Run a test suite from a file"""
     try:
-        # Load test configuration from file
-        # This is a simplified version - in reality, you'd load from YAML/JSON
-        suite_config = {
-            "name": "Test Suite",
-            "description": "Generated test suite",
-            "tests": [
-                {
-                    "name": "Sample Test",
-                    "request": {
-                        "method": "GET",
-                        "url": "https://httpbin.org/get",
-                        "headers": {}
-                    },
-                    "assertions": [
-                        {"status_code": 200}
-                    ]
-                }
-            ],
-            "parallel": kwargs.get("parallel", False),
-            "timeout": kwargs.get("timeout", 300),
-            "retries": kwargs.get("retries", 0)
-        }
+        import yaml
+        from pathlib import Path
         
-        suite = TestSuite(**suite_config)
-        return await test_runner.run_suite(suite)
+        # Load test file directly
+        path = Path(test_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Test file not found: {test_file}")
+        
+        with open(path, 'r') as f:
+            test_data = yaml.safe_load(f)
+        
+        if not isinstance(test_data, list):
+            raise ValueError(f"Test file must contain a list of tests")
+        
+        log.info(f"Loaded {len(test_data)} tests from {test_file}")
+        
+        # Execute tests directly
+        results = []
+        total_tests = len(test_data)
+        passed_tests = 0
+        total_response_time = 0
+        
+        for i, test_config in enumerate(test_data):
+            test_name = test_config.get("name", f"Test {i+1}")
+            log.info(f"Running test: {test_name}")
+            
+            try:
+                # Extract request details
+                request_config = test_config.get("request", {})
+                method = request_config.get("method", "GET")
+                url = request_config.get("url", "")
+                headers = request_config.get("headers", {})
+                json_data = request_config.get("json", None)
+                
+                # Make request
+                start_time = time.time()
+                async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
+                    response = await client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        json=json_data
+                    )
+                response_time = (time.time() - start_time) * 1000
+                total_response_time += response_time
+                
+                # Check expectations
+                expect_config = test_config.get("expect", {})
+                status_passed = True
+                json_passed = True
+                error_message = None
+                
+                # Status assertion
+                if "status" in expect_config:
+                    expected_status = expect_config["status"]
+                    if response.status_code != expected_status:
+                        status_passed = False
+                        error_message = f"Expected status {expected_status}, got {response.status_code}"
+                
+                # JSON assertions
+                if "json" in expect_config and status_passed:
+                    try:
+                        response_json = response.json()
+                        expected_json = expect_config["json"]
+                        for key, value in expected_json.items():
+                            if key not in response_json or response_json[key] != value:
+                                json_passed = False
+                                error_message = f"JSON assertion failed for key: {key}"
+                                break
+                    except Exception as e:
+                        json_passed = False
+                        error_message = f"JSON parsing failed: {str(e)}"
+                
+                # Determine test result
+                if status_passed and json_passed:
+                    test_status = "passed"
+                    passed_tests += 1
+                else:
+                    test_status = "failed"
+                
+                result = {
+                    "test_name": test_name,
+                    "status": test_status,
+                    "response_time": round(response_time, 2),
+                    "response_code": response.status_code,
+                    "response_body": response.text[:500],
+                    "error": error_message,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                results.append(result)
+                log.info(f"Test {test_name}: {test_status}")
+                
+            except Exception as e:
+                result = {
+                    "test_name": test_name,
+                    "status": "error",
+                    "response_time": 0,
+                    "response_code": None,
+                    "response_body": "",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+                results.append(result)
+                log.error(f"Test {test_name} failed: {e}")
+        
+        # Calculate summary
+        success_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
+        avg_response_time = (total_response_time / total_tests) if total_tests > 0 else 0
+        
+        return {
+            "execution_id": f"exec_{int(time.time())}",
+            "status": "completed",
+            "total_tests": total_tests,
+            "passed_tests": passed_tests,
+            "failed_tests": total_tests - passed_tests,
+            "success_rate": round(success_rate, 2),
+            "avg_response_time": round(avg_response_time, 2),
+            "results": results,
+            "test_file": test_file,
+            "timestamp": time.time()
+        }
         
     except Exception as e:
         log.error(f"Failed to run test suite: {e}")

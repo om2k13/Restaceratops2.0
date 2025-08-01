@@ -1,6 +1,8 @@
 // API service for communicating with the Restaceratops backend
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? process.env.REACT_APP_API_BASE_URL || 'https://your-railway-app.railway.app'
+  : 'http://localhost:8000';
 
 export interface ChatMessage {
   message: string;
@@ -98,10 +100,10 @@ class ApiService {
     return this.request('/api/health');
   }
 
-  async sendChatMessage(message: string): Promise<ChatResponse> {
+  async sendChatMessage(message: { message: string }): Promise<ChatResponse> {
     return this.request('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(message),
     });
   }
 
@@ -117,15 +119,32 @@ class ApiService {
     return this.request(`/api/tests/${encodeURIComponent(testFile)}`);
   }
 
-  async runTests(request: TestExecutionRequest): Promise<{ execution_id: string; status: string; message: string; timestamp: string }> {
+  async runTests(request: TestExecutionRequest): Promise<{
+    execution_id: string;
+    status: string;
+    total_tests: number;
+    passed_tests: number;
+    failed_tests: number;
+    success_rate: number;
+    avg_response_time: number;
+    results: any[];
+    test_file: string;
+    timestamp: string;
+  }> {
     return this.request('/api/tests/run', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        test_file: request.test_files[0],
+        options: {
+          parallel: request.parallel,
+          timeout: request.timeout
+        }
+      }),
     });
   }
 
   async getExecutionStatus(executionId: string): Promise<TestExecutionStatus> {
-    return this.request(`/api/tests/execution/${executionId}`);
+    return this.request(`/api/tests/status`);
   }
 
   async getSystemStats(): Promise<SystemStats> {
