@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 import logging
+import re
 
 log = logging.getLogger(__name__)
 
@@ -14,27 +15,100 @@ class DatabaseManager:
     def __init__(self):
         self.client = None
         self.db = None
-        self.mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-        self.db_name = os.getenv("MONGODB_DB_NAME", "restaceratops")
+        self.mongo_uri = os.getenv("MONGODB_URI", "")
+        self.db_name = os.getenv("MONGODB_DB_NAME", "Restaceratops")
+        self._validate_connection_string()
+        
+    def _validate_connection_string(self):
+        """Validate and fix MongoDB connection string."""
+        if not self.mongo_uri:
+            log.warning("⚠️ No MongoDB URI provided - using fallback mode")
+            return
+            
+        # Check if it's a valid MongoDB URI
+        if not self.mongo_uri.startswith(("mongodb://", "mongodb+srv://")):
+            log.error("❌ Invalid MongoDB URI format")
+            self.mongo_uri = ""
+            return
+            
+        # Fix common issues with MongoDB Atlas connection strings
+        if "mongodb+srv://" in self.mongo_uri:
+            # Ensure proper format for MongoDB Atlas
+            if "?retryWrites=true&w=majority" not in self.mongo_uri:
+                self.mongo_uri += "?retryWrites=true&w=majority"
+                
+        log.info(f"🔗 MongoDB URI configured for database: {self.db_name}")
+    
+    def _create_atlas_connection_string(self):
+        """Create a proper MongoDB Atlas connection string."""
+        # This is a template - you'll need to replace with your actual cluster details
+        username = "om2k13"
+        password = "om2k13"
+        cluster_name = "cluster0"  # This might need to be updated
+        project_id = "your-project-id"  # This needs to be your actual project ID
+        
+        # Try different cluster name patterns
+        possible_clusters = [
+            f"mongodb+srv://{username}:{password}@{cluster_name}.{project_id}.mongodb.net/?retryWrites=true&w=majority",
+            f"mongodb+srv://{username}:{password}@{cluster_name}.mongodb.net/?retryWrites=true&w=majority",
+            f"mongodb+srv://{username}:{password}@{cluster_name}.xxxxx.mongodb.net/?retryWrites=true&w=majority"
+        ]
+        
+        return possible_clusters[1]  # Use the most common format
         
     async def connect(self):
-        """Connect to MongoDB."""
-        try:
-            self.client = AsyncIOMotorClient(self.mongo_uri)
-            self.db = self.client[self.db_name]
-            
-            # Test connection
-            await self.client.admin.command('ping')
-            log.info(f"✅ Connected to MongoDB: {self.db_name}")
-            
-            # Create indexes
-            await self._create_indexes()
-            
-        except Exception as e:
-            log.error(f"❌ MongoDB connection failed: {e}")
-            # Fallback to in-memory storage
+        """Connect to MongoDB with improved error handling."""
+        if not self.mongo_uri:
+            log.warning("⚠️ No MongoDB URI - using in-memory fallback")
             self.client = None
             self.db = None
+            return
+            
+        # Try multiple connection string formats
+        connection_strings = [
+            self.mongo_uri,
+            self._create_atlas_connection_string()
+        ]
+        
+        for i, conn_str in enumerate(connection_strings):
+            if not conn_str:
+                continue
+                
+            try:
+                log.info(f"🔗 Attempting MongoDB connection (attempt {i+1})...")
+                
+                # Set connection timeout
+                self.client = AsyncIOMotorClient(
+                    conn_str,
+                    serverSelectionTimeoutMS=10000,  # 10 second timeout
+                    connectTimeoutMS=10000,
+                    socketTimeoutMS=10000
+                )
+                
+                self.db = self.client[self.db_name]
+                
+                # Test connection with timeout
+                await asyncio.wait_for(
+                    self.client.admin.command('ping'),
+                    timeout=10.0
+                )
+                
+                log.info(f"✅ Successfully connected to MongoDB: {self.db_name}")
+                
+                # Create indexes
+                await self._create_indexes()
+                return  # Success - exit the loop
+                
+            except asyncio.TimeoutError:
+                log.error(f"❌ MongoDB connection timeout (attempt {i+1})")
+                self._fallback_to_memory()
+            except Exception as e:
+                log.error(f"❌ MongoDB connection failed (attempt {i+1}): {e}")
+                self._fallback_to_memory()
+        
+        # If all attempts failed
+        log.warning("⚠️ All MongoDB connection attempts failed - using in-memory fallback")
+        self._fallback_to_memory()
     
     async def _create_indexes(self):
         """Create database indexes."""
@@ -212,11 +286,16 @@ class DatabaseManager:
         else:
             return obj
     
-    async def close(self):
-        """Close database connection."""
+    def _fallback_to_memory(self):
+        """Fallback to in-memory storage when MongoDB is unavailable."""
+        log.warning("⚠️ Falling back to in-memory storage")
         if self.client:
-            self.client.close()
-            log.info("✅ MongoDB connection closed")
+            try:
+                self.client.close()
+            except:
+                pass
+        self.client = None
+        self.db = None
 
 # Global database instance
 db_manager = DatabaseManager()
