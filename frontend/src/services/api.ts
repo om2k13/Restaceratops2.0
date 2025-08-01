@@ -1,7 +1,7 @@
 // API service for communicating with the Restaceratops backend
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? process.env.REACT_APP_API_BASE_URL || 'https://your-railway-app.railway.app'
+const API_BASE_URL = import.meta.env.PROD 
+  ? import.meta.env.VITE_REACT_APP_API_BASE_URL || 'https://restaceratops.onrender.com'
   : 'http://localhost:8000';
 
 export interface ChatMessage {
@@ -73,6 +73,8 @@ class ApiService {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log(`🌐 Making API request to: ${url}`);
+    
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
@@ -83,21 +85,25 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
+      console.log(`📡 Response status: ${response.status} for ${endpoint}`);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error(`❌ API error for ${endpoint}:`, errorData);
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`✅ API success for ${endpoint}:`, data);
+      return data;
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error);
+      console.error(`❌ API request failed for ${endpoint}:`, error);
       throw error;
     }
   }
 
   async healthCheck(): Promise<{ status: string; timestamp: string; ai_system: string; websocket_connections: number; active_executions: number }> {
-    return this.request('/api/health');
+    return this.request('/health');
   }
 
   async sendChatMessage(message: { message: string }): Promise<ChatResponse> {
