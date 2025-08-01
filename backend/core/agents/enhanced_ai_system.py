@@ -18,14 +18,17 @@ class OpenRouterAI:
     """OpenRouter AI provider using Qwen3 Coder model."""
     
     def __init__(self):
+        """Initialize OpenRouter AI with Qwen3 Coder model."""
         self.api_key = os.getenv("OPENROUTER_API_KEY")
         self.model = "qwen/qwen3-coder:free"
         self.base_url = "https://openrouter.ai/api/v1"
         
-        if not self.api_key:
-            log.warning("⚠️ No OpenRouter API key configured")
-        else:
+        if self.api_key:
             log.info(f"✅ OpenRouter AI configured with {self.model}")
+            log.info(f"🔑 API key found: {self.api_key[:10]}...{self.api_key[-4:]}")
+        else:
+            log.warning("⚠️ No OpenRouter API key found in environment variables")
+            log.warning("🔧 Set OPENROUTER_API_KEY environment variable to enable real AI")
     
     async def generate_response(self, messages: List[Dict[str, str]]) -> Optional[str]:
         """Generate response using OpenRouter API directly."""
@@ -35,6 +38,7 @@ class OpenRouterAI:
         
         try:
             log.info(f"🤖 Calling OpenRouter API with model: {self.model}")
+            log.info(f"📝 Sending {len(messages)} messages to OpenRouter")
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
@@ -51,17 +55,21 @@ class OpenRouterAI:
                     }
                 )
                 
+                log.info(f"📡 OpenRouter response status: {response.status_code}")
+                
                 if response.status_code == 200:
                     result = response.json()
                     ai_response = result["choices"][0]["message"]["content"]
                     log.info("✅ OpenRouter response generated successfully")
                     return ai_response
                 else:
-                    log.error(f"❌ OpenRouter API error: {response.status_code} - {response.text}")
+                    log.error(f"❌ OpenRouter API error: {response.status_code}")
+                    log.error(f"❌ Response body: {response.text}")
                     return None
                     
         except Exception as e:
             log.error(f"❌ Failed to call OpenRouter API: {e}")
+            log.error(f"❌ Exception type: {type(e).__name__}")
             return None
 
 class EnhancedAISystem:
@@ -127,7 +135,7 @@ Remember: You're helping users build robust, reliable APIs through comprehensive
                 self.conversation_history.append({"role": "user", "content": user_input})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
-                # Keep only last 10 messages to prevent context overflow
+                # Keep only last 10 messages to prevent memory issues
                 if len(self.conversation_history) > 10:
                     self.conversation_history = self.conversation_history[-10:]
                 
