@@ -17,6 +17,9 @@ class DatabaseManager:
         self.db = None
         self.mongo_uri = os.getenv("MONGODB_URI", "")
         self.db_name = os.getenv("MONGODB_DB_NAME", "Restaceratops")
+        # In-memory storage for fallback
+        self._in_memory_test_results = []
+        self._in_memory_executions = []
         self._validate_connection_string()
         
     def _validate_connection_string(self):
@@ -131,59 +134,133 @@ class DatabaseManager:
     async def save_test_execution(self, execution_data: Dict[str, Any]) -> str:
         """Save test execution data."""
         try:
-            if self.db is None:
-                return "no_db"
-            
             execution_id = execution_data.get("execution_id")
             execution_data["timestamp"] = datetime.utcnow()
             
             # Convert to JSON-serializable format
             clean_execution_data = self._clean_for_json(execution_data)
             
-            await self.db.test_executions.update_one(
-                {"execution_id": execution_id},
-                {"$set": clean_execution_data},
-                upsert=True
-            )
+            if self.db is not None:
+                # Try MongoDB first
+                try:
+                    await self.db.test_executions.update_one(
+                        {"execution_id": execution_id},
+                        {"$set": clean_execution_data},
+                        upsert=True
+                    )
+                    
+                    # Save individual test results
+                    for result in execution_data.get("results", []):
+                        clean_result = self._clean_for_json(result)
+                        clean_result["execution_id"] = execution_id
+                        clean_result["timestamp"] = datetime.utcnow()
+                        await self.db.test_results.insert_one(clean_result)
+                    
+                    log.info(f"✅ Saved test execution to MongoDB: {execution_id}")
+                except Exception as mongo_error:
+                    log.warning(f"⚠️ MongoDB save failed, using in-memory: {mongo_error}")
+                    self._save_to_memory(execution_data)
+            else:
+                # Use in-memory storage
+                self._save_to_memory(execution_data)
             
-            # Save individual test results
-            for result in execution_data.get("results", []):
-                clean_result = self._clean_for_json(result)
-                clean_result["execution_id"] = execution_id
-                clean_result["timestamp"] = datetime.utcnow()
-                await self.db.test_results.insert_one(clean_result)
-            
-            log.info(f"✅ Saved test execution: {execution_id}")
             return execution_id
             
         except Exception as e:
             log.error(f"❌ Failed to save test execution: {e}")
             return "error"
     
+    def _save_to_memory(self, execution_data: Dict[str, Any]):
+        """Save test execution to in-memory storage."""
+        try:
+            # Save execution
+            self._in_memory_executions.append(execution_data)
+            
+            # Save individual results
+            for result in execution_data.get("results", []):
+                result_copy = result.copy()
+                result_copy["execution_id"] = execution_data.get("execution_id")
+                result_copy["timestamp"] = datetime.utcnow()
+                self._in_memory_test_results.append(result_copy)
+            
+            # Keep only last 1000 results to prevent memory issues
+            if len(self._in_memory_test_results) > 1000:
+                self._in_memory_test_results = self._in_memory_test_results[-1000:]
+            
+            log.info(f"✅ Saved test execution to memory: {execution_data.get('execution_id')}")
+        except Exception as e:
+            log.error(f"❌ Failed to save to memory: {e}")
+    
     async def get_dashboard_stats(self) -> Dict[str, Any]:
         """Get aggregated dashboard statistics."""
         try:
-            if self.db is None:
-                return self._get_empty_stats()
+            if self.db is not None:
+                # Try MongoDB first
+                try:
+                    # Get total tests
+                    total_tests = await self.db.test_results.count_documents({})
+                    
+                    # Get passed tests
+                    passed_tests = await self.db.test_results.count_documents({"status": "passed"})
+                    
+                    # Calculate success rate
+                    success_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
+                    
+                    # Get average response time
+                    pipeline = [
+                        {"$group": {"_id": None, "avg_response_time": {"$avg": "$response_time"}}}
+                    ]
+                    result = await self.db.test_results.aggregate(pipeline).to_list(1)
+                    avg_response_time = result[0]["avg_response_time"] if result else 0
+                    
+                    # Get recent results (last 10)
+                    recent_results = await self.db.test_results.find().sort("timestamp", -1).limit(10).to_list(10)
+                    
+                    # Format recent results
+                    formatted_results = []
+                    for result in recent_results:
+                        formatted_results.append({
+                            "test_name": result.get("test_name", ""),
+                            "status": result.get("status", ""),
+                            "response_time": result.get("response_time", 0),
+                            "response_code": result.get("response_code", 0),
+                            "timestamp": result.get("timestamp", datetime.utcnow()).isoformat(),
+                            "error": result.get("error")
+                        })
+                    
+                    log.info(f"📊 Dashboard stats from MongoDB: {total_tests} total tests, {passed_tests} passed, {success_rate}% success rate")
+                    
+                    return {
+                        "total_tests": total_tests,
+                        "success_rate": round(success_rate, 2),
+                        "avg_response_time": round(avg_response_time, 2),
+                        "running_tests": 0,  # Will be updated when we add real-time tracking
+                        "recent_results": formatted_results
+                    }
+                except Exception as mongo_error:
+                    log.warning(f"⚠️ MongoDB stats failed, using in-memory: {mongo_error}")
+                    return self._get_stats_from_memory()
+            else:
+                # Use in-memory storage
+                return self._get_stats_from_memory()
             
-            # Get total tests
-            total_tests = await self.db.test_results.count_documents({})
-            
-            # Get passed tests
-            passed_tests = await self.db.test_results.count_documents({"status": "passed"})
-            
-            # Calculate success rate
+        except Exception as e:
+            log.error(f"❌ Failed to get dashboard stats: {e}")
+            return self._get_empty_stats()
+    
+    def _get_stats_from_memory(self) -> Dict[str, Any]:
+        """Get dashboard stats from in-memory storage."""
+        try:
+            total_tests = len(self._in_memory_test_results)
+            passed_tests = len([r for r in self._in_memory_test_results if r.get("status") == "passed"])
             success_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
             
-            # Get average response time
-            pipeline = [
-                {"$group": {"_id": None, "avg_response_time": {"$avg": "$response_time"}}}
-            ]
-            result = await self.db.test_results.aggregate(pipeline).to_list(1)
-            avg_response_time = result[0]["avg_response_time"] if result else 0
+            # Calculate average response time
+            response_times = [r.get("response_time", 0) for r in self._in_memory_test_results]
+            avg_response_time = sum(response_times) / len(response_times) if response_times else 0
             
             # Get recent results (last 10)
-            recent_results = await self.db.test_results.find().sort("timestamp", -1).limit(10).to_list(10)
+            recent_results = sorted(self._in_memory_test_results, key=lambda x: x.get("timestamp", ""), reverse=True)[:10]
             
             # Format recent results
             formatted_results = []
@@ -193,22 +270,21 @@ class DatabaseManager:
                     "status": result.get("status", ""),
                     "response_time": result.get("response_time", 0),
                     "response_code": result.get("response_code", 0),
-                    "timestamp": result.get("timestamp", datetime.utcnow()).isoformat(),
+                    "timestamp": result.get("timestamp", datetime.utcnow()).isoformat() if isinstance(result.get("timestamp"), datetime) else str(result.get("timestamp", "")),
                     "error": result.get("error")
                 })
             
-            log.info(f"📊 Dashboard stats: {total_tests} total tests, {passed_tests} passed, {success_rate}% success rate")
+            log.info(f"📊 Dashboard stats from memory: {total_tests} total tests, {passed_tests} passed, {success_rate}% success rate")
             
             return {
                 "total_tests": total_tests,
                 "success_rate": round(success_rate, 2),
                 "avg_response_time": round(avg_response_time, 2),
-                "running_tests": 0,  # Will be updated when we add real-time tracking
+                "running_tests": 0,
                 "recent_results": formatted_results
             }
-            
         except Exception as e:
-            log.error(f"❌ Failed to get dashboard stats: {e}")
+            log.error(f"❌ Failed to get memory stats: {e}")
             return self._get_empty_stats()
     
     def _get_empty_stats(self) -> Dict[str, Any]:

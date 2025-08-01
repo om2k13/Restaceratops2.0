@@ -38,7 +38,12 @@ const CleanTestRunner: React.FC = () => {
     'backend/tests/real-world-example.yml',
     'backend/tests/production_ready.yml',
     'backend/tests/advanced_features.yml',
-    'backend/tests/my-api-example.yml'
+    'backend/tests/my-api-example.yml',
+    'tests/simple_test.yml',
+    'tests/comprehensive_test.yml',
+    'tests/real-world-example.yml',
+    'tests/production_ready.yml',
+    'tests/generated_openrouter.yml'
   ];
 
   const runTests = async () => {

@@ -2,19 +2,6 @@
 
 **A modern, AI-augmented API testing platform that leverages OpenRouter's Qwen3 Coder model for intelligent test generation, execution, and analysis.**
 
-## 🚀 **LIVE DEPLOYMENT**
-
-### **Production URLs:**
-- **🌐 Frontend (User Interface)**: https://restaceratops7.vercel.app
-- **🔧 Backend (API Server)**: https://restaceratops.onrender.com
-- **📚 API Documentation**: https://restaceratops.onrender.com/docs
-
-### **Current Status:**
-- ✅ **Fully Deployed and Live**
-- ✅ **AI Integration Working** (Qwen3 Coder)
-- ✅ **All Features Functional**
-- ✅ **Ready for Production Use**
-
 ## ✨ Features
 
 - 🤖 **AI-Powered Testing**: Uses OpenRouter Qwen3 Coder for intelligent test generation
@@ -23,7 +10,7 @@
 - 🔧 **Easy Integration**: Simple setup with minimal dependencies
 - 💰 **Cost-Effective**: Uses free OpenRouter models for zero-cost AI integration
 - 🚀 **Modern Stack**: Built with FastAPI, React, and TypeScript
-- 🗄️ **Data Persistence**: MongoDB Atlas integration (with in-memory fallback)
+- 🗄️ **Data Persistence**: MongoDB Atlas integration for professional data management
 
 ## 🏗️ Architecture
 
@@ -53,7 +40,7 @@ restaceratops/
 - Python 3.12+
 - Node.js 18+
 - OpenRouter API key
-- MongoDB Atlas account (optional)
+- MongoDB Atlas account
 
 ### Local Development
 
@@ -142,7 +129,7 @@ restaceratops/
 
 3. **Add Environment Variables**
    ```
-   VITE_REACT_APP_API_BASE_URL=https://your-backend-url.onrender.com
+   REACT_APP_API_BASE_URL=https://your-backend-url.onrender.com
    ```
 
 ## 🤖 AI Integration Setup
@@ -159,7 +146,7 @@ restaceratops/
    export OPENROUTER_API_KEY='your-api-key'
    ```
 
-### MongoDB Atlas Setup (Optional)
+### MongoDB Atlas Setup
 
 1. **Create MongoDB Atlas Account**
    - Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
@@ -235,7 +222,7 @@ The platform supports YAML test specifications:
 - **Dashboard with real statistics** and monitoring
 - **Downloadable test reports** in Markdown format
 - **WebSocket support** for real-time communication
-- **MongoDB data persistence** (with in-memory fallback)
+- **MongoDB data persistence** for professional data management
 
 ### 🔒 Security
 - **API keys stay secure** on backend environment variables
@@ -305,14 +292,6 @@ The platform supports YAML test specifications:
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🎉 **DEMO READY**
-
-**Your Restaceratops is now live and ready for your HR demo!**
-
-- **Frontend**: https://restaceratops7.vercel.app
-- **Backend**: https://restaceratops.onrender.com
-- **All features working**: AI chat, test execution, dashboard
 
 ---
 
