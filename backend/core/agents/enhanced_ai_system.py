@@ -10,12 +10,7 @@ import logging
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 import asyncio
-
-from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
-from langchain.memory import ConversationBufferWindowMemory
-
-from core.models.vector_store import get_vector_store, setup_vector_store
+import httpx
 
 log = logging.getLogger("agent.enhanced_ai_system")
 
@@ -32,26 +27,41 @@ class OpenRouterAI:
         else:
             log.info(f"✅ OpenRouter AI configured with {self.model}")
     
-    def create_llm(self) -> Optional[Any]:
-        """Create OpenRouter LLM instance."""
+    async def generate_response(self, messages: List[Dict[str, str]]) -> Optional[str]:
+        """Generate response using OpenRouter API directly."""
         if not self.api_key:
             log.warning("⚠️ No OpenRouter API key provided")
             return None
         
         try:
-            log.info(f"🤖 Creating OpenRouter LLM with model: {self.model}")
-            llm = ChatOpenAI(
-                model=self.model,
-                openai_api_key=self.api_key,
-                openai_api_base=self.base_url,
-                temperature=0.7,
-                max_tokens=2000,
-                timeout=30
-            )
-            log.info("✅ OpenRouter LLM created successfully")
-            return llm
+            log.info(f"🤖 Calling OpenRouter API with model: {self.model}")
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": 0.7,
+                        "max_tokens": 2000
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    ai_response = result["choices"][0]["message"]["content"]
+                    log.info("✅ OpenRouter response generated successfully")
+                    return ai_response
+                else:
+                    log.error(f"❌ OpenRouter API error: {response.status_code} - {response.text}")
+                    return None
+                    
         except Exception as e:
-            log.error(f"❌ Failed to create OpenRouter LLM: {e}")
+            log.error(f"❌ Failed to call OpenRouter API: {e}")
             return None
 
 class EnhancedAISystem:
@@ -60,33 +70,13 @@ class EnhancedAISystem:
     def __init__(self):
         """Initialize the enhanced AI system."""
         self.openrouter_ai = OpenRouterAI()
-        self.conversation_memory = ConversationBufferWindowMemory(
-            k=10,
-            return_messages=True,
-            memory_key="chat_history"
-        )
-        
-        # Initialize vector store
-        self.vector_store = None
-        try:
-            self.vector_store = get_vector_store()
-            log.info("✅ Vector store initialized")
-        except Exception as e:
-            log.warning(f"⚠️ Vector store initialization failed: {e}")
+        self.conversation_history = []
         
         log.info("Enhanced AI system initialized with OpenRouter Qwen3 Coder")
     
     async def handle_conversation(self, user_input: str) -> str:
         """Handle user conversation using OpenRouter Qwen3 Coder with proper AI integration."""
         try:
-            llm = self.openrouter_ai.create_llm()
-            if not llm:
-                log.warning("⚠️ No LLM available, using fallback")
-                return self._get_intelligent_fallback_response(user_input)
-            
-            # Get conversation history
-            chat_history = self.conversation_memory.chat_memory.messages
-            
             # Create comprehensive system prompt for Qwen3
             system_prompt = """You are Restaceratops, an advanced AI-powered API testing assistant built with the Qwen3 Coder model. Your core purpose is to provide expert-level guidance for API testing and development.
 
@@ -118,32 +108,33 @@ You're integrated into the Restaceratops platform, which provides:
 Remember: You're helping users build robust, reliable APIs through comprehensive testing."""
             
             # Build messages array for Qwen3
-            messages = []
+            messages = [
+                {"role": "system", "content": system_prompt}
+            ]
             
-            # Add system message
-            messages.append(SystemMessage(content=system_prompt))
-            
-            # Add conversation history (last 6 messages for context)
-            for msg in chat_history[-6:]:
-                if isinstance(msg, HumanMessage):
-                    messages.append(HumanMessage(content=msg.content))
-                elif isinstance(msg, AIMessage):
-                    messages.append(AIMessage(content=msg.content))
+            # Add conversation history (last 4 messages for context)
+            for msg in self.conversation_history[-4:]:
+                messages.append(msg)
             
             # Add current user input
-            messages.append(HumanMessage(content=user_input))
+            messages.append({"role": "user", "content": user_input})
             
             # Get response from Qwen3
-            log.info("🤖 Calling Qwen3 Coder model...")
-            response = await llm.agenerate([messages])
-            ai_response = response.generations[0][0].text
+            ai_response = await self.openrouter_ai.generate_response(messages)
             
-            # Update conversation memory
-            self.conversation_memory.chat_memory.add_user_message(user_input)
-            self.conversation_memory.chat_memory.add_ai_message(ai_response)
-            
-            log.info("✅ Qwen3 response generated successfully")
-            return ai_response
+            if ai_response:
+                # Update conversation history
+                self.conversation_history.append({"role": "user", "content": user_input})
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                
+                # Keep only last 10 messages to prevent context overflow
+                if len(self.conversation_history) > 10:
+                    self.conversation_history = self.conversation_history[-10:]
+                
+                return ai_response
+            else:
+                # Fallback to intelligent response
+                return self._get_intelligent_fallback_response(user_input)
             
         except Exception as e:
             log.error(f"Error in conversation: {e}")
@@ -152,11 +143,6 @@ Remember: You're helping users build robust, reliable APIs through comprehensive
     async def generate_intelligent_tests(self, api_spec: str, requirements: str) -> str:
         """Generate intelligent test cases using OpenRouter Qwen3 Coder."""
         try:
-            llm = self.openrouter_ai.create_llm()
-            if not llm:
-                log.warning("⚠️ No LLM available for test generation, using fallback")
-                return self._get_fallback_test_template(api_spec)
-            
             # Create comprehensive test generation prompt
             system_prompt = """You are an expert API testing engineer using the Qwen3 Coder model. Your task is to generate comprehensive, production-ready test cases for REST APIs.
 
@@ -192,16 +178,18 @@ Remember: You're helping users build robust, reliable APIs through comprehensive
 Please provide a complete, ready-to-use test suite."""
 
             messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ]
 
             log.info("🤖 Generating test cases with Qwen3 Coder...")
-            response = await llm.agenerate([messages])
-            generated_tests = response.generations[0][0].text
+            ai_response = await self.openrouter_ai.generate_response(messages)
             
-            log.info("✅ Test cases generated successfully")
-            return generated_tests
+            if ai_response:
+                log.info("✅ Test cases generated successfully")
+                return ai_response
+            else:
+                return self._get_fallback_test_template(api_spec)
             
         except Exception as e:
             log.error(f"Error generating tests: {e}")
@@ -213,8 +201,7 @@ Please provide a complete, ready-to-use test suite."""
             "provider": "OpenRouter",
             "model": self.openrouter_ai.model,
             "api_key_configured": bool(self.openrouter_ai.api_key),
-            "vector_store_available": self.vector_store is not None,
-            "memory_messages": len(self.conversation_memory.chat_memory.messages)
+            "conversation_history_length": len(self.conversation_history)
         }
     
     def _get_intelligent_fallback_response(self, user_input: str) -> str:
@@ -682,7 +669,7 @@ Please customize these templates based on your specific API requirements."""
     async def reset_system(self) -> str:
         """Reset the AI system."""
         try:
-            self.conversation_memory.clear()
+            self.conversation_history = []
             return "✅ AI system reset successfully"
         except Exception as e:
             log.error(f"Error resetting system: {e}")
