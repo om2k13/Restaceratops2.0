@@ -196,8 +196,10 @@ const CleanDashboard: React.FC = () => {
             <span className="text-sm text-gray-700">System: {stats.system_status}</span>
           </div>
           <div className="flex items-center space-x-3">
-            <div className={`w-3 h-3 rounded-full ${stats.ai_system?.status === 'operational' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-            <span className="text-sm text-gray-700">AI System: {stats.ai_system?.status || 'unknown'}</span>
+            <div className={`w-3 h-3 rounded-full ${stats.ai_system?.api_key_configured ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+            <span className="text-sm text-gray-700">
+              AI System: {stats.ai_system?.api_key_configured ? `${stats.ai_system?.provider} (${stats.ai_system?.model})` : 'Fallback Mode'}
+            </span>
           </div>
           <div className="flex items-center space-x-3">
             <div className="w-3 h-3 rounded-full bg-blue-500"></div>

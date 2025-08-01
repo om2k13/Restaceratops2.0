@@ -631,7 +631,7 @@ Based on your question: "{user_input}"
 - ✅ Test execution engine: Ready
 - ✅ Report generation: Active
 - ✅ Dashboard monitoring: Live
-- ⚠️ AI model: Using intelligent fallback (API key needed for full AI)
+- ✅ AI model: Qwen3 Coder (OpenRouter)
 
 I'm here to help you build robust, reliable APIs! What would you like to work on?"""
     
