@@ -33,11 +33,12 @@ const CleanTestRunner: React.FC = () => {
   const [showReport, setShowReport] = useState(false);
 
   const availableTestFiles = [
-    'tests/simple_test.yml',
-    'tests/comprehensive_test.yml',
-    'tests/real-world-example.yml',
-    'tests/production_ready.yml',
-    'tests/generated_openrouter.yml'
+    'backend/tests/simple_test.yml',
+    'backend/tests/comprehensive_test.yml',
+    'backend/tests/real-world-example.yml',
+    'backend/tests/production_ready.yml',
+    'backend/tests/advanced_features.yml',
+    'backend/tests/my-api-example.yml'
   ];
 
   const runTests = async () => {
