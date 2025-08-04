@@ -1,4 +1,6 @@
 // API service for communicating with the Restaceratops backend
+import axios, { AxiosError } from 'axios';
+import type { AxiosInstance, AxiosResponse } from 'axios';
 
 const API_BASE_URL = import.meta.env.PROD 
   ? import.meta.env.VITE_REACT_APP_API_BASE_URL || 'https://restaceratops.onrender.com'
@@ -65,39 +67,54 @@ export interface SystemStats {
 }
 
 class ApiService {
-  private baseUrl: string;
+  private axiosInstance: AxiosInstance;
 
   constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
-  }
-
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
-    console.log(`🌐 Making API request to: ${url}`);
-    
-    const config: RequestInit = {
+    this.axiosInstance = axios.create({
+      baseURL: baseUrl,
+      timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers,
       },
-      ...options,
-    };
+    });
 
-    try {
-      const response = await fetch(url, config);
-      console.log(`📡 Response status: ${response.status} for ${endpoint}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(`❌ API error for ${endpoint}:`, errorData);
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+    // Request interceptor for logging
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        console.log(`🌐 Making API request to: ${config.baseURL}${config.url}`);
+        return config;
+      },
+      (error) => {
+        console.error('❌ Request error:', error);
+        return Promise.reject(error);
       }
+    );
 
-      const data = await response.json();
-      console.log(`✅ API success for ${endpoint}:`, data);
-      return data;
+    // Response interceptor for logging
+    this.axiosInstance.interceptors.response.use(
+      (response: AxiosResponse) => {
+        console.log(`✅ API success for ${response.config.url}:`, response.data);
+        return response;
+      },
+      (error: AxiosError) => {
+        console.error(`❌ API error for ${error.config?.url}:`, error.response?.data);
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  private async request<T>(endpoint: string, options: any = {}): Promise<T> {
+    try {
+      const response = await this.axiosInstance.request({
+        url: endpoint,
+        ...options,
+      });
+      return response.data;
     } catch (error) {
-      console.error(`❌ API request failed for ${endpoint}:`, error);
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(errorMessage);
+      }
       throw error;
     }
   }
@@ -109,7 +126,7 @@ class ApiService {
   async sendChatMessage(message: { message: string }): Promise<ChatResponse> {
     return this.request('/api/chat', {
       method: 'POST',
-      body: JSON.stringify(message),
+      data: message,
     });
   }
 
@@ -139,14 +156,48 @@ class ApiService {
   }> {
     return this.request('/api/tests/run', {
       method: 'POST',
-      body: JSON.stringify({
+      data: {
         test_file: request.test_files[0],
         options: {
           parallel: request.parallel,
           timeout: request.timeout
         }
-      }),
+      },
     });
+  }
+
+  async runSingleUrlTest(request: { method: string; url: string }): Promise<{
+    execution_id: string;
+    status: string;
+    response_time: number;
+    response_code: number;
+    response_body: string;
+    error?: string;
+  }> {
+    return this.request('/api/tests/single-url', {
+      method: 'POST',
+      data: request,
+    });
+  }
+
+  async uploadFile(file: File): Promise<{ status: string; message: string; filename: string; file_path: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await this.axiosInstance.post('/api/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
   }
 
   async getExecutionStatus(executionId: string): Promise<TestExecutionStatus> {
@@ -160,7 +211,7 @@ class ApiService {
   // WebSocket connection helper
   createWebSocketConnection(): WebSocket | null {
     try {
-      const wsUrl = this.baseUrl.replace('http', 'ws') + '/ws';
+      const wsUrl = this.axiosInstance.defaults.baseURL?.replace('http', 'ws') + '/ws';
       return new WebSocket(wsUrl);
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
@@ -179,30 +230,27 @@ class ApiService {
         const status = await this.getExecutionStatus(executionId);
         onUpdate(status);
         
-        // Stop polling if execution is complete
         if (status.status === 'completed' || status.status === 'failed') {
           isPolling = false;
           return;
         }
+        
+        setTimeout(poll, interval);
       } catch (error) {
-        console.error('Failed to poll execution status:', error);
+        console.error('Polling error:', error);
         isPolling = false;
-        return;
       }
-      
-      // Schedule next poll
-      setTimeout(poll, interval);
     };
     
-    // Start polling
     poll();
     
-    // Return function to stop polling
+    // Return cleanup function
     return () => {
       isPolling = false;
     };
   }
 }
 
-export const apiService = new ApiService();
-export default ApiService; 
+// Create and export a singleton instance
+const apiService = new ApiService();
+export default apiService; 

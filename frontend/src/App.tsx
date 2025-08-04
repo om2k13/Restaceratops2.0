@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import Dashboard from './pages/Dashboard';
 import TestRunner from './pages/TestRunner';
 import ChatInterface from './pages/ChatInterface';
+import { ChatProvider } from './contexts/ChatContext';
 import './App.css';
 
 const Navigation: React.FC = () => {
@@ -15,42 +16,46 @@ const Navigation: React.FC = () => {
   ];
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex">
-            <div className="flex-shrink-0 flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">🦖 Restaceratops</h1>
-            </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              {navItems.map((item) => (
-                <Link
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar */}
+      <div className="w-64 bg-white shadow-lg border-r border-gray-200">
+        {/* Logo */}
+        <div className="flex items-center justify-center h-16 border-b border-gray-200">
+          <h1 className="text-xl font-bold text-gray-900">🦖 Restaceratops</h1>
+        </div>
+        
+        {/* Navigation Items */}
+        <nav className="mt-6">
+          <div className="px-4 space-y-2">
+            {navItems.map((item) => (
+                              <Link
                   key={item.path}
                   to={item.path}
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-200 sidebar-nav-item ${
                     location.pathname === item.path
-                      ? 'border-blue-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="mr-2">{item.icon}</span>
+                  <span className="mr-3 text-lg">{item.icon}</span>
                   {item.label}
                 </Link>
-              ))}
-            </div>
+            ))}
+          </div>
+        </nav>
+        
+        {/* Footer */}
+        <div className="absolute bottom-0 w-64 p-4 border-t border-gray-200">
+          <div className="text-xs text-gray-500 text-center">
+            <p>🦖 API Testing Platform</p>
+            <p className="mt-1">Powered by AI</p>
           </div>
         </div>
       </div>
-    </nav>
-  );
-};
 
-const App: React.FC = () => {
-  return (
-    <Router>
-      <div className="min-h-screen bg-gray-50">
-        <Navigation />
-        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto main-content">
+        <main className="p-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/test-runner" element={<TestRunner />} />
@@ -58,6 +63,16 @@ const App: React.FC = () => {
           </Routes>
         </main>
       </div>
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <Router>
+      <ChatProvider>
+        <Navigation />
+      </ChatProvider>
     </Router>
   );
 };

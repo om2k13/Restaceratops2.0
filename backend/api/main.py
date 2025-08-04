@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
@@ -18,6 +18,9 @@ import json
 import logging
 from contextlib import asynccontextmanager
 import uvicorn
+import tempfile
+import shutil
+from pathlib import Path
 
 # Import core services
 from core.agents.enhanced_ai_system import EnhancedAISystem
@@ -32,6 +35,10 @@ log = logging.getLogger("restaceratops.clean_backend")
 
 # Initialize AI system
 ai_system = EnhancedAISystem()
+
+# Create uploads directory
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -104,7 +111,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- Pydantic Models ---
+# Pydantic models
 class ChatRequest(BaseModel):
     message: str
     context: Optional[Dict[str, Any]] = None
@@ -118,6 +125,10 @@ class OpenAPIRequest(BaseModel):
     output_path: Optional[str] = "tests/generated_from_openapi.yml"
     include_security: Optional[bool] = True
 
+class SingleUrlTestRequest(BaseModel):
+    method: str
+    url: str
+
 class TestReport(BaseModel):
     test_name: str
     status: str
@@ -126,6 +137,34 @@ class TestReport(BaseModel):
     response_body: str
     error: Optional[str] = None
     timestamp: str
+
+# File upload endpoint
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a test file"""
+    try:
+        # Validate file type
+        if not file.filename.endswith(('.yml', '.yaml')):
+            raise HTTPException(status_code=400, detail="Only YAML files are supported")
+        
+        # Create unique filename
+        file_path = UPLOADS_DIR / f"{file.filename}"
+        
+        # Save uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        log.info(f"File uploaded: {file_path}")
+        
+        return {
+            "status": "success",
+            "message": "File uploaded successfully",
+            "filename": file.filename,
+            "file_path": str(file_path)
+        }
+    except Exception as e:
+        log.error(f"File upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
 # --- Core Endpoints ---
 
@@ -327,6 +366,55 @@ async def generate_tests_openapi(request: OpenAPIRequest):
     except Exception as e:
         log.error(f"Test generation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Test generation failed: {str(e)}")
+
+@app.post("/api/tests/single-url")
+async def test_single_url(request: SingleUrlTestRequest):
+    """Test a single URL and return results."""
+    try:
+        import httpx
+        import time
+        from datetime import datetime
+        
+        log.info(f"Testing single URL: {request.method} {request.url}")
+        
+        start_time = time.time()
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.request(
+                method=request.method,
+                url=request.url,
+                headers={"User-Agent": "Restaceratops/1.0"}
+            )
+        
+        response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        
+        # Determine if test passed (2xx status codes)
+        status = "passed" if 200 <= response.status_code < 300 else "failed"
+        
+        result = {
+            "execution_id": f"single-url-{int(time.time())}",
+            "status": status,
+            "response_time": round(response_time, 2),
+            "response_code": response.status_code,
+            "response_body": response.text[:1000],  # Limit response body
+            "error": None if status == "passed" else f"HTTP {response.status_code}",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        log.info(f"Single URL test completed. Status: {status}, Response time: {response_time:.2f}ms")
+        return JSONResponse(content=result, status_code=200)
+        
+    except Exception as e:
+        log.error(f"Single URL test failed: {e}")
+        return JSONResponse(content={
+            "execution_id": f"single-url-error-{int(time.time())}",
+            "status": "failed",
+            "response_time": 0,
+            "response_code": 0,
+            "response_body": "",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }, status_code=200)  # Return 200 to show the error in the UI
 
 @app.get("/api/tests/status")
 async def get_tests_status():

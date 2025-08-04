@@ -1,0 +1,184 @@
+# 🦖 Sample API Test Suite
+# This demonstrates various API testing scenarios for Restaceratops
+
+- name: "Health Check Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/status/200"
+  expect:
+    status: 200
+
+- name: "Get JSON Response"
+  request:
+    method: GET
+    url: "https://httpbin.org/json"
+  expect:
+    status: 200
+    json:
+      slideshow:
+        author: "Yours Truly"
+
+- name: "POST Request with JSON Body"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    json:
+      name: "Test User"
+      email: "test@example.com"
+      age: 25
+      is_active: true
+  expect:
+    status: 200
+    json:
+      json:
+        name: "Test User"
+        email: "test@example.com"
+        age: 25
+        is_active: true
+
+- name: "PUT Request - Update Resource"
+  request:
+    method: PUT
+    url: "https://httpbin.org/put"
+    json:
+      id: 123
+      title: "Updated Title"
+      content: "Updated content"
+  expect:
+    status: 200
+    json:
+      json:
+        id: 123
+        title: "Updated Title"
+        content: "Updated content"
+
+- name: "DELETE Request"
+  request:
+    method: DELETE
+    url: "https://httpbin.org/delete"
+  expect:
+    status: 200
+
+- name: "Query Parameters Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/get?param1=value1&param2=value2&limit=10"
+  expect:
+    status: 200
+
+- name: "Headers Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/headers"
+    headers:
+      User-Agent: "Restaceratops-Test/1.0"
+      Accept: "application/json"
+      X-Custom-Header: "test-value"
+  expect:
+    status: 200
+
+- name: "Error Handling - 404 Not Found"
+  request:
+    method: GET
+    url: "https://httpbin.org/status/404"
+  expect:
+    status: 404
+
+- name: "Error Handling - 500 Server Error"
+  request:
+    method: GET
+    url: "https://httpbin.org/status/500"
+  expect:
+    status: 500
+
+- name: "Response Time Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/delay/1"
+  expect:
+    status: 200
+
+- name: "Form Data Test"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+    data: "name=TestUser&email=test@example.com&age=30"
+  expect:
+    status: 200
+
+- name: "Authentication Test (Basic)"
+  request:
+    method: GET
+    url: "https://httpbin.org/basic-auth/user/pass"
+    headers:
+      Authorization: "Basic dXNlcjpwYXNz"
+  expect:
+    status: 200
+
+- name: "File Upload Test"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    headers:
+      Content-Type: "multipart/form-data"
+    data:
+      file: "test-file.txt"
+      description: "Test file upload"
+  expect:
+    status: 200
+
+- name: "JSON Schema Validation Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/json"
+  expect:
+    status: 200
+    schema:
+      type: object
+      properties:
+        slideshow:
+          type: object
+          properties:
+            author:
+              type: string
+            title:
+              type: string
+            slides:
+              type: array
+      required: ["slideshow"]
+
+- name: "Rate Limiting Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/headers"
+  expect:
+    status: 200
+
+- name: "Complex JSON Response Test"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    json:
+      user:
+        id: 1
+        name: "John Doe"
+        email: "john@example.com"
+        preferences:
+          theme: "dark"
+          language: "en"
+      settings:
+        notifications: true
+        auto_save: false
+  expect:
+    status: 200
+    json:
+      json:
+        user:
+          id: 1
+          name: "John Doe"
+          email: "john@example.com"
+        settings:
+          notifications: true
+          auto_save: false 

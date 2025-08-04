@@ -1,0 +1,64 @@
+- name: Get all posts (GET)
+  request:
+    method: GET
+    url: https://jsonplaceholder.typicode.com/posts?_limit=1
+  expect:
+    status: 200
+    schema:
+      type: array
+      items:
+        $ref: '#/components/schemas/Post'
+- name: Create a new post (POST)
+  request:
+    method: POST
+    url: https://jsonplaceholder.typicode.com/posts
+    json: test_string
+  expect:
+    status: 201
+- name: Get a specific post (GET)
+  request:
+    method: GET
+    url: https://jsonplaceholder.typicode.com/posts/1
+  expect:
+    status: 200
+    schema:
+      $ref: '#/components/schemas/Post'
+- name: Update a post (PUT)
+  request:
+    method: PUT
+    url: https://jsonplaceholder.typicode.com/posts/1
+    json: test_string
+  expect:
+    status: 200
+    schema:
+      $ref: '#/components/schemas/Post'
+- name: Delete a post (DELETE)
+  request:
+    method: DELETE
+    url: https://jsonplaceholder.typicode.com/posts/1
+  expect:
+    status: 200
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Post deleted successfully
+- name: Get all users (GET)
+  request:
+    method: GET
+    url: https://jsonplaceholder.typicode.com/users
+  expect:
+    status: 200
+    schema:
+      type: array
+      items:
+        $ref: '#/components/schemas/User'
+- name: Get a specific user (GET)
+  request:
+    method: GET
+    url: https://jsonplaceholder.typicode.com/users/1
+  expect:
+    status: 200
+    schema:
+      $ref: '#/components/schemas/User'

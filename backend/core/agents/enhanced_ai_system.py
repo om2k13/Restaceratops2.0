@@ -85,6 +85,28 @@ class EnhancedAISystem:
     async def handle_conversation(self, user_input: str) -> str:
         """Handle user conversation using OpenRouter Qwen3 Coder with proper AI integration."""
         try:
+            # Check for different types of inputs and provide appropriate responses
+            user_input_lower = user_input.lower().strip()
+            
+            # Handle debugging requests FIRST (when user pastes test results)
+            # This should be checked before greetings to avoid false positives
+            if any(keyword in user_input_lower for keyword in ['solve', 'fix', 'error', 'failed', 'debug', 'help with', 'debbug']):
+                return self._get_debugging_guidance(user_input)
+            
+            # Handle greetings (only if it's a simple greeting, not mixed with test results)
+            if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']):
+                # Additional check to ensure it's not mixed with test results
+                if not any(test_keyword in user_input_lower for test_keyword in ['status', 'response', 'failed', 'error', 'ms', 'code']):
+                    return self._get_greeting_response()
+            
+            # Handle API testing questions
+            if any(keyword in user_input_lower for keyword in ['test api', 'api testing', 'how to test', 'testing api']):
+                return self._get_api_testing_guidance(user_input)
+            
+            # Handle general API questions
+            if any(keyword in user_input_lower for keyword in ['api', 'rest', 'http', 'endpoint']):
+                return self._get_general_api_guidance(user_input)
+            
             # Create comprehensive system prompt for Qwen3
             system_prompt = """You are Restaceratops, an advanced AI-powered API testing assistant built with the Qwen3 Coder model. Your core purpose is to provide expert-level guidance for API testing and development.
 
@@ -212,12 +234,28 @@ Please provide a complete, ready-to-use test suite."""
             "conversation_history_length": len(self.conversation_history)
         }
     
+    def _get_greeting_response(self) -> str:
+        """Provide friendly greeting responses."""
+        return """🦖 Hello! I'm Restaceratops, your AI-powered API testing assistant.
+
+I can help you with:
+✅ API testing strategies and best practices
+✅ Test case generation and automation
+✅ Debugging API issues and errors
+✅ Performance testing and optimization
+✅ Security testing guidance
+✅ Code generation for test scripts
+
+How can I assist you with API testing today?"""
+
     def _get_intelligent_fallback_response(self, user_input: str) -> str:
         """Get intelligent fallback response using logic-based analysis."""
         user_input_lower = user_input.lower()
         
         # Analyze user input and provide intelligent responses
-        if "authentication" in user_input_lower or "auth" in user_input_lower:
+        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'hey']):
+            return self._get_greeting_response()
+        elif "authentication" in user_input_lower or "auth" in user_input_lower:
             return self._get_authentication_guidance(user_input)
         elif "test" in user_input_lower and "api" in user_input_lower:
             return self._get_api_testing_guidance(user_input)
@@ -351,7 +389,18 @@ Based on your question: "{user_input}"
 Need help setting up specific test cases?"""
     
     def _get_debugging_guidance(self, user_input: str) -> str:
-        """Provide debugging guidance."""
+        """Provide debugging guidance for test failures and errors."""
+        
+        # Check if user pasted test results (more comprehensive check)
+        user_input_lower = user_input.lower()
+        test_result_indicators = [
+            'failed', 'error', 'status', 'response', 'ms', 'code', 
+            'expected status', 'got', 'test name', 'response time', 'response code'
+        ]
+        
+        if any(indicator in user_input_lower for indicator in test_result_indicators):
+            return self._analyze_test_results(user_input)
+        
         return f"""🐛 **API Debugging Guide**
 
 Based on your question: "{user_input}"
@@ -404,6 +453,8 @@ Based on your question: "{user_input}"
 3. Verify authentication
 4. Review error logs
 5. Test with minimal data
+
+**💡 Pro Tip**: If you have specific test results that failed, paste them here and I'll help you analyze the exact issue!
 
 Need help debugging a specific issue?"""
     
@@ -589,6 +640,146 @@ Based on your question: "{user_input}"
 
 Ready to generate tests for your API?"""
     
+    def _analyze_test_results(self, user_input: str) -> str:
+        """Analyze test results and provide specific solutions."""
+        
+        # Extract common patterns from test results
+        lines = user_input.split('\n')
+        status_codes = []
+        errors = []
+        urls = []
+        
+        for line in lines:
+            line_lower = line.lower()
+            # Extract status codes (look for patterns like "403", "500", "got 403", etc.)
+            if any(char.isdigit() for char in line):
+                # Look for status codes in various formats
+                words = line.split()
+                for i, word in enumerate(words):
+                    if word.isdigit() and len(word) == 3:  # Likely HTTP status code
+                        status_codes.append(word)
+                    elif word.lower() == 'got' and i + 1 < len(words) and words[i + 1].isdigit():
+                        status_codes.append(words[i + 1])
+                    elif word.lower() == 'status' and i + 1 < len(words) and words[i + 1].isdigit():
+                        status_codes.append(words[i + 1])
+            
+            # Extract URLs
+            if 'http' in line_lower:
+                urls.extend([word for word in line.split() if 'http' in word])
+            
+            # Extract errors and failed tests
+            if 'error' in line_lower or 'failed' in line_lower:
+                errors.append(line.strip())
+        
+        # Provide specific guidance based on patterns
+        if status_codes:
+            status_analysis = self._analyze_status_codes(status_codes)
+        else:
+            status_analysis = ""
+            
+        if errors:
+            error_analysis = self._analyze_errors(errors)
+        else:
+            error_analysis = ""
+            
+        return f"""🔍 **Test Results Analysis**
+
+I've analyzed your test results and found the following issues:
+
+{status_analysis}
+{error_analysis}
+
+**Recommended Solutions:**
+
+1. **Immediate Actions:**
+   - Verify the API endpoint is accessible
+   - Check if authentication is required
+   - Validate request format and headers
+   - Test with a simple tool like curl first
+
+2. **Debugging Steps:**
+   ```bash
+   # Test the endpoint manually
+   curl -X GET "YOUR_API_URL" -H "Content-Type: application/json"
+   
+   # Check response headers
+   curl -I "YOUR_API_URL"
+   
+   # Test with verbose output
+   curl -v "YOUR_API_URL"
+   ```
+
+3. **Common Fixes:**
+   - **401/403**: Add proper authentication headers
+   - **404**: Verify the URL is correct
+   - **400**: Check request body format
+   - **500**: Server issue, check API logs
+
+4. **Test Case Improvements:**
+   ```yaml
+   - name: "Improved Test Case"
+     request:
+       method: GET
+       url: "YOUR_API_URL"
+       headers:
+         Authorization: "Bearer YOUR_TOKEN"
+         Content-Type: "application/json"
+     expect:
+       status: 200
+       timeout: 10000  # 10 seconds
+   ```
+
+**Next Steps:**
+1. Try the manual curl commands above
+2. Check the API documentation
+3. Verify your test environment
+4. Run the improved test case
+
+Would you like me to help you create a specific test case for your API?"""
+
+    def _analyze_status_codes(self, status_codes: list) -> str:
+        """Analyze status codes and provide specific guidance."""
+        analysis = "**Status Code Analysis:**\n"
+        
+        for code in status_codes:
+            if code == '401':
+                analysis += f"- **401 Unauthorized**: Authentication required. Add proper headers.\n"
+            elif code == '403':
+                analysis += f"- **403 Forbidden**: Access denied. Check permissions.\n"
+            elif code == '404':
+                analysis += f"- **404 Not Found**: URL incorrect or endpoint doesn't exist.\n"
+            elif code == '400':
+                analysis += f"- **400 Bad Request**: Invalid request format or missing parameters.\n"
+            elif code == '500':
+                analysis += f"- **500 Internal Server Error**: Server issue. Check API logs.\n"
+            elif code == '502':
+                analysis += f"- **502 Bad Gateway**: Upstream server issue.\n"
+            elif code == '503':
+                analysis += f"- **503 Service Unavailable**: Server temporarily unavailable.\n"
+            else:
+                analysis += f"- **{code}**: Unknown status code. Check API documentation.\n"
+        
+        return analysis
+
+    def _analyze_errors(self, errors: list) -> str:
+        """Analyze error messages and provide guidance."""
+        analysis = "\n**Error Analysis:**\n"
+        
+        for error in errors[:3]:  # Limit to first 3 errors
+            error_lower = error.lower()
+            if 'timeout' in error_lower:
+                analysis += "- **Timeout**: Increase timeout value or check network.\n"
+            elif 'connection' in error_lower:
+                analysis += "- **Connection Error**: Check if API is accessible.\n"
+            elif 'ssl' in error_lower or 'certificate' in error_lower:
+                analysis += "- **SSL Error**: Check certificate or use HTTP for testing.\n"
+            elif 'json' in error_lower:
+                analysis += "- **JSON Error**: Check response format and parsing.\n"
+            else:
+                analysis += f"- **Error**: {error[:100]}...\n"
+        
+        return analysis
+
     def _get_general_api_guidance(self, user_input: str) -> str:
         """Provide general API guidance."""
         return f"""🦖 **Restaceratops API Testing Assistant**

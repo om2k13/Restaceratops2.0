@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiService } from '../services/api';
+import apiService from '../services/api';
 
 interface TestResult {
   test_name: string;
@@ -31,6 +31,9 @@ const CleanTestRunner: React.FC = () => {
   const [results, setResults] = useState<TestExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [singleUrl, setSingleUrl] = useState('');
+  const [singleUrlMethod, setSingleUrlMethod] = useState('GET');
+  const [useSingleUrl, setUseSingleUrl] = useState(false);
 
   const availableTestFiles = [
     'backend/tests/simple_test.yml',
@@ -39,6 +42,8 @@ const CleanTestRunner: React.FC = () => {
     'backend/tests/production_ready.yml',
     'backend/tests/advanced_features.yml',
     'backend/tests/my-api-example.yml',
+    'backend/tests/custom-test-example.yml',
+    'backend/tests/sample-api-tests.yml',
     'tests/simple_test.yml',
     'tests/comprehensive_test.yml',
     'tests/real-world-example.yml',
@@ -47,24 +52,86 @@ const CleanTestRunner: React.FC = () => {
   ];
 
   const runTests = async () => {
-    if (!testFile && !uploadedFile) {
-      setError('Please select a test file or upload one');
+    if (!testFile && !uploadedFile && !useSingleUrl) {
+      setError('Please select a test file, upload one, enter a custom file path, or test a single URL');
+      return;
+    }
+
+    if (useSingleUrl && !singleUrl.trim()) {
+      setError('Please enter a URL to test');
       return;
     }
 
     setIsRunning(true);
-    setError(null);
-    setResults(null);
-    setShowReport(false);
+    setError('');
 
     try {
       let fileToUse = testFile;
       
-      // If user uploaded a file, use that instead
+      // If user uploaded a file, upload it to the backend first
       if (uploadedFile) {
-        // For now, we'll use the uploaded file name
-        // In a real implementation, you'd upload the file to the backend
-        fileToUse = uploadedFile.name;
+        try {
+          const uploadResult = await apiService.uploadFile(uploadedFile);
+          fileToUse = uploadResult.filename; // Use the filename from the upload response
+        } catch (uploadError) {
+          console.error('File upload error:', uploadError);
+          setError('Failed to upload file');
+          setIsRunning(false);
+          return;
+        }
+      }
+
+      // If using single URL, create a temporary test
+      if (useSingleUrl) {
+        const tempTest = {
+          name: `Test ${singleUrlMethod} ${singleUrl}`,
+          request: {
+            method: singleUrlMethod,
+            url: singleUrl
+          },
+          expect: {
+            status: 200
+          }
+        };
+        
+        // Convert to YAML and test
+        const yamlTest = `- name: "${tempTest.name}"
+  request:
+    method: ${tempTest.request.method}
+    url: "${tempTest.request.url}"
+  expect:
+    status: ${tempTest.expect.status}`;
+        
+        // Create a temporary file or use the backend to test single URL
+        const response = await apiService.runSingleUrlTest({
+          method: singleUrlMethod,
+          url: singleUrl
+        });
+        
+        const formattedResults: TestExecutionResult = {
+          execution_id: response.execution_id,
+          status: response.status,
+          total_tests: 1,
+          passed_tests: response.status === 'passed' ? 1 : 0,
+          failed_tests: response.status === 'failed' ? 1 : 0,
+          success_rate: response.status === 'passed' ? 100 : 0,
+          avg_response_time: response.response_time || 0,
+          results: [{
+            test_name: `Test ${singleUrlMethod} ${singleUrl}`,
+            status: response.status,
+            response_time: response.response_time || 0,
+            response_code: response.response_code || 0,
+            response_body: response.response_body || '',
+            error: response.error || '',
+            timestamp: new Date().toISOString()
+          }],
+          test_file: `Single URL Test: ${singleUrl}`,
+          timestamp: new Date().toISOString()
+        };
+        
+        setResults(formattedResults);
+        setShowReport(true);
+        return;
       }
 
       // Call the backend directly - it returns results immediately
@@ -95,14 +162,13 @@ const CleanTestRunner: React.FC = () => {
         test_file: fileToUse,
         timestamp: response.timestamp
       };
-      
+
       setResults(formattedResults);
       setShowReport(true);
-      setIsRunning(false);
-      
-    } catch (err) {
+    } catch (err: any) {
       console.error('Test execution error:', err);
-      setError('Failed to execute tests');
+      setError(err.message || 'Failed to execute tests');
+    } finally {
       setIsRunning(false);
     }
   };
@@ -111,8 +177,17 @@ const CleanTestRunner: React.FC = () => {
     const file = event.target.files?.[0];
     if (file) {
       setUploadedFile(file);
-      setTestFile(''); // Clear dropdown selection
     }
+  };
+
+  const handleTestFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTestFile(e.target.value);
+    setUploadedFile(null); // Clear uploaded file when using custom path
+  };
+
+  const handleTestFileSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setTestFile(e.target.value);
+    setUploadedFile(null); // Clear uploaded file when using predefined file
   };
 
   const generateReport = () => {
@@ -164,6 +239,39 @@ ${results.success_rate >= 90 ? '✅ Excellent test performance!' :
     URL.revokeObjectURL(url);
   };
 
+  const copyResultsToChat = () => {
+    if (!results) return;
+    
+    // Create a formatted summary of test results
+    const testSummary = `🧪 Test Results Summary
+
+📊 **Test File:** ${results.test_file}
+📈 **Status:** ${results.status}
+⏱️ **Total Tests:** ${results.total_tests}
+✅ **Passed:** ${results.passed_tests}
+❌ **Failed:** ${results.failed_tests}
+📊 **Success Rate:** ${results.success_rate.toFixed(1)}%
+⏱️ **Average Response Time:** ${results.avg_response_time.toFixed(0)}ms
+
+📋 **Failed Tests:**
+${results.results
+  .filter(r => r.status === 'failed')
+  .map(r => `- ${r.test_name}: ${r.error || 'Unknown error'} (Status: ${r.response_code})`)
+  .join('\n')}
+
+🔍 **All Results:**
+${results.results.map(r => `- ${r.test_name}: ${r.status} (${r.response_code}) - ${r.response_time}ms`).join('\n')}
+
+💡 **Copy this to AI Chat and ask for help debugging the failed tests!**`;
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(testSummary).then(() => {
+      alert('✅ Test results copied to clipboard! Go to AI Chat and paste them to get debugging help.');
+    }).catch(() => {
+      alert('❌ Failed to copy to clipboard. Please copy the results manually.');
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -177,24 +285,94 @@ ${results.success_rate >= 90 ? '✅ Excellent test performance!' :
         <h2 className="text-lg font-medium text-gray-900 mb-4">Test Configuration</h2>
         
         <div className="space-y-4">
-          <div>
-            <label htmlFor="testFile" className="block text-sm font-medium text-gray-700 mb-2">
-              Test File
-            </label>
-            <select
-              id="testFile"
-              value={testFile}
-              onChange={(e) => setTestFile(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              disabled={!!uploadedFile}
-            >
-              {availableTestFiles.map((file) => (
-                <option key={file} value={file}>
-                  {file}
-                </option>
-              ))}
-            </select>
-          </div>
+                     <div>
+             <label htmlFor="testFile" className="block text-sm font-medium text-gray-700 mb-2">
+               Test File (Select from list or paste your own path)
+             </label>
+             <div className="relative">
+               <input
+                 type="text"
+                 id="testFile"
+                 value={testFile}
+                 onChange={handleTestFileChange}
+                 placeholder="Select from dropdown or paste your file path here..."
+                 className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                 disabled={!!uploadedFile || useSingleUrl}
+                 list="testFileOptions"
+               />
+               <select
+                 className="absolute inset-y-0 right-0 px-2 border-l border-gray-300 bg-gray-50 rounded-r-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                 onChange={handleTestFileSelect}
+                 disabled={!!uploadedFile || useSingleUrl}
+               >
+                 <option value="">📁 Browse...</option>
+                 {availableTestFiles.map((file) => (
+                   <option key={file} value={file}>
+                     {file}
+                   </option>
+                 ))}
+               </select>
+               <datalist id="testFileOptions">
+                 {availableTestFiles.map((file) => (
+                   <option key={file} value={file} />
+                 ))}
+               </datalist>
+             </div>
+             <p className="mt-1 text-xs text-gray-500">
+               💡 Tip: Click the arrow to browse predefined files, or paste your own path directly
+             </p>
+           </div>
+
+           {/* Single URL Testing */}
+           <div className="border-t pt-4">
+             <div className="flex items-center justify-between mb-2">
+               <label className="block text-sm font-medium text-gray-700">
+                 Or Test Single URL
+               </label>
+               <button
+                 onClick={() => setUseSingleUrl(!useSingleUrl)}
+                 className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                   useSingleUrl
+                     ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                     : 'bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200'
+                 }`}
+               >
+                 {useSingleUrl ? '✓ Enabled' : 'Enable'}
+               </button>
+             </div>
+             
+             {useSingleUrl && (
+               <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                 <div className="flex space-x-3">
+                   <div className="w-24">
+                     <select
+                       value={singleUrlMethod}
+                       onChange={(e) => setSingleUrlMethod(e.target.value)}
+                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                     >
+                       <option value="GET">GET</option>
+                       <option value="POST">POST</option>
+                       <option value="PUT">PUT</option>
+                       <option value="DELETE">DELETE</option>
+                       <option value="PATCH">PATCH</option>
+                     </select>
+                   </div>
+                   <div className="flex-1">
+                     <input
+                       type="url"
+                       value={singleUrl}
+                       onChange={(e) => setSingleUrl(e.target.value)}
+                       placeholder="Enter URL to test (e.g., https://api.example.com/users)"
+                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                     />
+                   </div>
+                 </div>
+                 <p className="text-xs text-blue-600">
+                   💡 Quick test: Enter any URL to test its response and copy results to AI Chat for debugging
+                 </p>
+               </div>
+             )}
+           </div>
           
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -290,20 +468,26 @@ ${results.success_rate >= 90 ? '✅ Excellent test performance!' :
               </div>
             </div>
 
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setShowReport(!showReport)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-              >
-                {showReport ? 'Hide' : 'Show'} Detailed Report
-              </button>
-              <button
-                onClick={downloadReport}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-              >
-                Download Report
-              </button>
-            </div>
+                         <div className="flex space-x-4">
+               <button
+                 onClick={() => setShowReport(!showReport)}
+                 className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+               >
+                 {showReport ? 'Hide' : 'Show'} Detailed Report
+               </button>
+               <button
+                 onClick={downloadReport}
+                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+               >
+                 Download Report
+               </button>
+               <button
+                 onClick={copyResultsToChat}
+                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+               >
+                 📋 Copy to AI Chat
+               </button>
+             </div>
           </div>
 
           {/* Detailed Results */}

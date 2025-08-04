@@ -1,0 +1,33 @@
+# 🦖 Custom Test File Example
+# This demonstrates how to use your own test files
+
+- name: "Custom Health Check"
+  request:
+    method: GET
+    url: "https://httpbin.org/status/200"
+  expect:
+    status: 200
+
+- name: "Custom JSON Test"
+  request:
+    method: GET
+    url: "https://httpbin.org/json"
+  expect:
+    status: 200
+    json:
+      slideshow:
+        author: "Yours Truly"
+
+- name: "Custom POST Test"
+  request:
+    method: POST
+    url: "https://httpbin.org/post"
+    json:
+      custom_field: "custom_value"
+      test_number: 42
+  expect:
+    status: 200
+    json:
+      json:
+        custom_field: "custom_value"
+        test_number: 42 

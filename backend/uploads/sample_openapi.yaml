@@ -1,0 +1,340 @@
+openapi: 3.0.0
+info:
+  title: Sample API for Restaceratops Testing
+  description: A sample API specification for testing the Restaceratops AI agent
+  version: 1.0.0
+  contact:
+    name: Restaceratops Team
+    email: support@restaceratops.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://jsonplaceholder.typicode.com
+    description: JSONPlaceholder API for testing
+
+paths:
+  /posts:
+    get:
+      summary: Get all posts
+      description: Retrieve a list of all posts
+      operationId: getPosts
+      tags:
+        - Posts
+      parameters:
+        - name: _limit
+          in: query
+          description: Number of posts to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Post'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    post:
+      summary: Create a new post
+      description: Create a new post with the provided data
+      operationId: createPost
+      tags:
+        - Posts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostInput'
+      responses:
+        '201':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/{id}:
+    get:
+      summary: Get a specific post
+      description: Retrieve a specific post by its ID
+      operationId: getPost
+      tags:
+        - Posts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    put:
+      summary: Update a post
+      description: Update an existing post with new data
+      operationId: updatePost
+      tags:
+        - Posts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostInput'
+      responses:
+        '200':
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    delete:
+      summary: Delete a post
+      description: Delete a specific post by its ID
+      operationId: deletePost
+      tags:
+        - Posts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Post deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Post deleted successfully"
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users:
+    get:
+      summary: Get all users
+      description: Retrieve a list of all users
+      operationId: getUsers
+      tags:
+        - Users
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      summary: Get a specific user
+      description: Retrieve a specific user by their ID
+      operationId: getUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the post
+          example: 1
+        title:
+          type: string
+          description: Title of the post
+          example: "Sample Post Title"
+        body:
+          type: string
+          description: Content of the post
+          example: "This is the body of the post..."
+        userId:
+          type: integer
+          description: ID of the user who created the post
+          example: 1
+      required:
+        - id
+        - title
+        - body
+        - userId
+
+    PostInput:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Title of the post
+          example: "New Post Title"
+        body:
+          type: string
+          description: Content of the post
+          example: "This is the body of the new post..."
+        userId:
+          type: integer
+          description: ID of the user who created the post
+          example: 1
+      required:
+        - title
+        - body
+        - userId
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the user
+          example: 1
+        name:
+          type: string
+          description: Full name of the user
+          example: "John Doe"
+        username:
+          type: string
+          description: Username of the user
+          example: "johndoe"
+        email:
+          type: string
+          format: email
+          description: Email address of the user
+          example: "john.doe@example.com"
+        phone:
+          type: string
+          description: Phone number of the user
+          example: "+1-555-123-4567"
+        website:
+          type: string
+          description: Website of the user
+          example: "https://johndoe.com"
+        company:
+          type: object
+          properties:
+            name:
+              type: string
+              example: "Acme Corp"
+            catchPhrase:
+              type: string
+              example: "Making the world a better place"
+            bs:
+              type: string
+              example: "harness real-time e-markets"
+      required:
+        - id
+        - name
+        - username
+        - email
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Resource not found"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 404
+        message:
+          type: string
+          description: Detailed error message
+          example: "The requested resource was not found"
+      required:
+        - error
+        - status
+
+tags:
+  - name: Posts
+    description: Operations related to posts
+  - name: Users
+    description: Operations related to users 

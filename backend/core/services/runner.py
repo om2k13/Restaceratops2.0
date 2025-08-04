@@ -444,10 +444,22 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
         import yaml
         from pathlib import Path
         
-        # Load test file directly
-        path = Path(test_file)
-        if not path.exists():
-            raise FileNotFoundError(f"Test file not found: {test_file}")
+        # Check multiple locations for the test file
+        possible_paths = [
+            Path(test_file),  # Direct path
+            Path("uploads") / test_file,  # Uploaded file
+            Path("tests") / test_file,  # Tests directory
+            Path("backend/tests") / test_file,  # Backend tests directory
+        ]
+        
+        path = None
+        for possible_path in possible_paths:
+            if possible_path.exists():
+                path = possible_path
+                break
+        
+        if not path:
+            raise FileNotFoundError(f"Test file not found: {test_file}. Checked paths: {[str(p) for p in possible_paths]}")
         
         with open(path, 'r') as f:
             test_data = yaml.safe_load(f)
@@ -455,7 +467,7 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
         if not isinstance(test_data, list):
             raise ValueError(f"Test file must contain a list of tests")
         
-        log.info(f"Loaded {len(test_data)} tests from {test_file}")
+        log.info(f"Loaded {len(test_data)} tests from {path}")
         
         # Execute tests directly
         results = []
@@ -545,14 +557,14 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
                     "timestamp": datetime.now().isoformat()
                 }
                 results.append(result)
-                log.error(f"Test {test_name} failed: {e}")
+                log.error(f"Test {test_name} failed with error: {e}")
         
         # Calculate summary
         success_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0
         avg_response_time = (total_response_time / total_tests) if total_tests > 0 else 0
         
         return {
-            "execution_id": f"exec_{int(time.time())}",
+            "execution_id": str(uuid.uuid4()),
             "status": "completed",
             "total_tests": total_tests,
             "passed_tests": passed_tests,
@@ -560,13 +572,9 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
             "success_rate": round(success_rate, 2),
             "avg_response_time": round(avg_response_time, 2),
             "results": results,
-            "test_file": test_file,
-            "timestamp": time.time()
+            "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
-        log.error(f"Failed to run test suite: {e}")
-        return {
-            "error": str(e),
-            "status": "failed"
-        }
+        log.error(f"Test execution failed: {e}")
+        raise Exception(f"Test execution failed: {str(e)}")
