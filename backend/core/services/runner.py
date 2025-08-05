@@ -237,8 +237,8 @@ class TestRunner:
             # Resolve variables in URL
             url = self._resolve_variables(url, context.variables)
             
-            # Prepare headers
-            headers = {**context.headers, **request_config.get("headers", {})}
+            # Prepare headers - only use headers from the test config, not context
+            headers = request_config.get("headers", {})
             headers = {k: self._resolve_variables(v, context.variables) for k, v in headers.items()}
             
             # Prepare body - handle both 'body' and 'json' fields
@@ -252,14 +252,25 @@ class TestRunner:
             
             # Execute request
             start_time = time.time()
-            async with httpx.AsyncClient(timeout=context.timeout, verify=context.verify_ssl) as client:
-                response = await client.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=body if method in ["POST", "PUT", "PATCH"] else None,
-                    params=request_config.get("params", {})
-                )
+            # Set a browser-like User-Agent to avoid being blocked by APIs
+            default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            async with httpx.AsyncClient(timeout=context.timeout, verify=context.verify_ssl, headers=default_headers) as client:
+                # Only use json parameter for POST/PUT/PATCH requests
+                if method.upper() in ["POST", "PUT", "PATCH"] and body:
+                    response = await client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        json=body,
+                        params=request_config.get("params", {})
+                    )
+                else:
+                    response = await client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        params=request_config.get("params", {})
+                    )
             
             response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
             
@@ -268,15 +279,23 @@ class TestRunner:
             result.response_code = response.status_code
             result.response_body = response.text[:1000]  # Limit response body length
             
-            # Run assertions from expect block (DSL format)
+            # Run assertions from expect block (DSL format) - support both "expect" and "expected_response"
             expect_config = test_config.get("expect", {})
+            if not expect_config:
+                expect_config = test_config.get("expected_response", {})
             passed_assertions = 0
             failed_assertions = 0
             
             try:
-                # Status code assertion
+                # Status code assertion - support both "status" and "status_code"
                 if "status" in expect_config:
                     expected_status = expect_config["status"]
+                elif "status_code" in expect_config:
+                    expected_status = expect_config["status_code"]
+                else:
+                    expected_status = None
+                
+                if expected_status is not None:
                     if response.status_code == expected_status:
                         passed_assertions += 1
                     else:
@@ -464,8 +483,11 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
         with open(path, 'r') as f:
             test_data = yaml.safe_load(f)
         
-        if not isinstance(test_data, list):
-            raise ValueError(f"Test file must contain a list of tests")
+        # Handle both formats: direct list or wrapped in 'tests' key
+        if isinstance(test_data, dict) and 'tests' in test_data:
+            test_data = test_data['tests']
+        elif not isinstance(test_data, list):
+            raise ValueError(f"Test file must contain a list of tests or a 'tests' key with a list")
         
         log.info(f"Loaded {len(test_data)} tests from {path}")
         
@@ -489,25 +511,43 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
                 
                 # Make request
                 start_time = time.time()
-                async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30)) as client:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        headers=headers,
-                        json=json_data
-                    )
+                # Set a browser-like User-Agent to avoid being blocked by APIs
+                default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                async with httpx.AsyncClient(timeout=kwargs.get("timeout", 30), headers=default_headers) as client:
+                    # Only use json parameter for POST/PUT/PATCH requests
+                    if method.upper() in ["POST", "PUT", "PATCH"] and json_data:
+                        response = await client.request(
+                            method=method,
+                            url=url,
+                            headers=headers,
+                            json=json_data
+                        )
+                    else:
+                        response = await client.request(
+                            method=method,
+                            url=url,
+                            headers=headers
+                        )
                 response_time = (time.time() - start_time) * 1000
                 total_response_time += response_time
                 
-                # Check expectations
+                # Check expectations - support both "expect" and "expected_response"
                 expect_config = test_config.get("expect", {})
+                if not expect_config:
+                    expect_config = test_config.get("expected_response", {})
                 status_passed = True
                 json_passed = True
                 error_message = None
                 
-                # Status assertion
+                # Status assertion - support both "status" and "status_code"
                 if "status" in expect_config:
                     expected_status = expect_config["status"]
+                elif "status_code" in expect_config:
+                    expected_status = expect_config["status_code"]
+                else:
+                    expected_status = None
+                
+                if expected_status is not None:
                     if response.status_code != expected_status:
                         status_passed = False
                         error_message = f"Expected status {expected_status}, got {response.status_code}"

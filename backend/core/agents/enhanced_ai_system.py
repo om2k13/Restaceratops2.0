@@ -19,58 +19,80 @@ class OpenRouterAI:
     
     def __init__(self):
         """Initialize OpenRouter AI with Qwen3 Coder model."""
-        self.api_key = os.getenv("OPENROUTER_API_KEY")
+        # Get API key from environment or use the provided Qwen Turbo key
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "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")
+        # Use the original Qwen model that was working
         self.model = "qwen/qwen3-coder:free"
         self.base_url = "https://openrouter.ai/api/v1"
         
         if self.api_key:
             log.info(f"✅ OpenRouter AI configured with {self.model}")
-            log.info(f"🔑 API key found: {self.api_key[:10]}...{self.api_key[-4:]}")
+            log.info(f"🔑 API key configured: {self.api_key[:10]}...{self.api_key[-4:]}")
         else:
-            log.warning("⚠️ No OpenRouter API key found in environment variables")
+            log.warning("⚠️ No OpenRouter API key found")
             log.warning("🔧 Set OPENROUTER_API_KEY environment variable to enable real AI")
     
     async def generate_response(self, messages: List[Dict[str, str]]) -> Optional[str]:
-        """Generate response using OpenRouter API directly."""
+        """Generate response using OpenRouter API directly with fallback models."""
         if not self.api_key:
             log.warning("⚠️ No OpenRouter API key provided")
             return None
         
-        try:
-            log.info(f"🤖 Calling OpenRouter API with model: {self.model}")
-            log.info(f"📝 Sending {len(messages)} messages to OpenRouter")
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "temperature": 0.7,
-                        "max_tokens": 2000
-                    }
-                )
+        # Try different Qwen models in order of preference (including Turbo variants)
+        qwen_models = [
+            "qwen/qwen3-coder:free",
+            "qwen/qwen3-coder:7b",
+            "qwen/qwen3-coder:14b",
+            "qwen/qwen3-coder:32b",
+            "qwen/qwen2.5-7b-instruct",
+            "qwen/qwen2.5-14b-instruct",
+            "qwen/qwen2.5-turbo",
+            "qwen/qwen2.5-72b-instruct"
+        ]
+        
+        for model in qwen_models:
+            try:
+                log.info(f"🤖 Trying OpenRouter API with model: {model}")
+                log.info(f"📝 Sending {len(messages)} messages to OpenRouter")
                 
-                log.info(f"📡 OpenRouter response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_response = result["choices"][0]["message"]["content"]
-                    log.info("✅ OpenRouter response generated successfully")
-                    return ai_response
-                else:
-                    log.error(f"❌ OpenRouter API error: {response.status_code}")
-                    log.error(f"❌ Response body: {response.text}")
-                    return None
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "temperature": 0.7,
+                            "max_tokens": 2000
+                        }
+                    )
                     
-        except Exception as e:
-            log.error(f"❌ Failed to call OpenRouter API: {e}")
-            log.error(f"❌ Exception type: {type(e).__name__}")
-            return None
+                    log.info(f"📡 OpenRouter response status: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        ai_response = result["choices"][0]["message"]["content"]
+                        log.info(f"✅ OpenRouter response generated successfully with {model}")
+                        # Update the current model to the successful one
+                        self.model = model
+                        return ai_response
+                    elif response.status_code == 429:
+                        log.warning(f"⚠️ Rate limited for {model}, trying next model...")
+                        continue
+                    else:
+                        log.error(f"❌ OpenRouter API error: {response.status_code}")
+                        log.error(f"❌ Response body: {response.text}")
+                        continue
+                        
+            except Exception as e:
+                log.error(f"❌ Failed to call OpenRouter API with {model}: {e}")
+                continue
+        
+        log.error("❌ All Qwen models failed or were rate limited")
+        return None
 
 class EnhancedAISystem:
     """Enhanced AI system using OpenRouter with Qwen3 Coder."""
@@ -85,27 +107,14 @@ class EnhancedAISystem:
     async def handle_conversation(self, user_input: str) -> str:
         """Handle user conversation using OpenRouter Qwen3 Coder with proper AI integration."""
         try:
-            # Check for different types of inputs and provide appropriate responses
+            # Always try to use real AI first for most requests
             user_input_lower = user_input.lower().strip()
             
-            # Handle debugging requests FIRST (when user pastes test results)
-            # This should be checked before greetings to avoid false positives
-            if any(keyword in user_input_lower for keyword in ['solve', 'fix', 'error', 'failed', 'debug', 'help with', 'debbug']):
-                return self._get_debugging_guidance(user_input)
-            
-            # Handle greetings (only if it's a simple greeting, not mixed with test results)
+            # Only use template responses for very specific cases
             if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']):
-                # Additional check to ensure it's not mixed with test results
-                if not any(test_keyword in user_input_lower for test_keyword in ['status', 'response', 'failed', 'error', 'ms', 'code']):
+                # Check if it's a simple greeting without test-related content
+                if not any(test_keyword in user_input_lower for test_keyword in ['status', 'response', 'failed', 'error', 'ms', 'code', 'http', 'api', 'get', 'post', 'url']):
                     return self._get_greeting_response()
-            
-            # Handle API testing questions
-            if any(keyword in user_input_lower for keyword in ['test api', 'api testing', 'how to test', 'testing api']):
-                return self._get_api_testing_guidance(user_input)
-            
-            # Handle general API questions
-            if any(keyword in user_input_lower for keyword in ['api', 'rest', 'http', 'endpoint']):
-                return self._get_general_api_guidance(user_input)
             
             # Create comprehensive system prompt for Qwen3
             system_prompt = """You are Restaceratops, an advanced AI-powered API testing assistant built with the Qwen3 Coder model. Your core purpose is to provide expert-level guidance for API testing and development.

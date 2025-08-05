@@ -27,13 +27,14 @@ from core.agents.enhanced_ai_system import EnhancedAISystem
 from core.services.runner import run_suite
 from core.services.dsl_loader import load_tests
 from core.services.openapi_generator import OpenAPITestGenerator
+from core.services.postman_parser import postman_parser
 from core.models.database import get_db_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("restaceratops.clean_backend")
 
-# Initialize AI system
+# Initialize AI system with OpenRouter
 ai_system = EnhancedAISystem()
 
 # Create uploads directory
@@ -415,6 +416,50 @@ async def test_single_url(request: SingleUrlTestRequest):
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }, status_code=200)  # Return 200 to show the error in the UI
+
+@app.post("/api/import/postman")
+async def import_postman_collection(file: UploadFile = File(...)):
+    """Import Postman collection JSON and convert to test cases"""
+    try:
+        log.info(f"Importing Postman collection: {file.filename}")
+        
+        # Read the uploaded file
+        content = await file.read()
+        json_content = content.decode('utf-8')
+        
+        # Parse the Postman collection
+        collection_data = postman_parser.parse_collection(json_content)
+        
+        # Generate YAML test file
+        yaml_content = postman_parser.generate_yaml(collection_data)
+        
+        # Save the generated YAML file
+        filename = f"postman_import_{collection_data['name'].replace(' ', '_').lower()}.yml"
+        file_path = UPLOADS_DIR / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(yaml_content)
+        
+        log.info(f"Successfully imported Postman collection: {collection_data['name']}")
+        log.info(f"Generated {len(collection_data['test_cases'])} test cases")
+        
+        return {
+            "status": "success",
+            "message": f"Successfully imported Postman collection: {collection_data['name']}",
+            "filename": filename,
+            "file_path": str(file_path),
+            "collection_info": {
+                "name": collection_data['name'],
+                "description": collection_data['description'],
+                "total_test_cases": len(collection_data['test_cases']),
+                "variables": len(collection_data.get('variables', [])),
+                "test_cases": collection_data['test_cases']
+            }
+        }
+        
+    except Exception as e:
+        log.error(f"Postman import failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to import Postman collection: {str(e)}")
 
 @app.get("/api/tests/status")
 async def get_tests_status():
