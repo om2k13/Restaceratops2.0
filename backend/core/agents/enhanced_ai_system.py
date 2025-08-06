@@ -19,10 +19,10 @@ class OpenRouterAI:
     
     def __init__(self):
         """Initialize OpenRouter AI with Qwen3 Coder model."""
-        # Get API key from environment or use the provided Qwen Turbo key
-        self.api_key = os.getenv("OPENROUTER_API_KEY", "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")
-        # Use the original Qwen model that was working
-        self.model = "qwen/qwen3-coder:free"
+        # Get API key from environment or use the provided Meta Llama key
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "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")
+        # Use Meta Llama model
+        self.model = "meta-llama/llama-3-8b-instruct"
         self.base_url = "https://openrouter.ai/api/v1"
         
         if self.api_key:
@@ -38,16 +38,16 @@ class OpenRouterAI:
             log.warning("⚠️ No OpenRouter API key provided")
             return None
         
-        # Try different Qwen models in order of preference (only valid models)
-        qwen_models = [
+        # Try different models in order of preference (Meta Llama first, then Qwen as fallback)
+        models = [
+            "meta-llama/llama-3-8b-instruct",
+            "meta-llama/llama-3-8b-instruct:free",
             "qwen/qwen3-coder:7b",
             "qwen/qwen3-coder:14b",
-            "qwen/qwen3-coder:32b",
-            "qwen/qwen2.5-7b-instruct",
-            "qwen/qwen2.5-14b-instruct"
+            "qwen/qwen3-coder:32b"
         ]
         
-        for model in qwen_models:
+        for model in models:
             try:
                 log.info(f"🤖 Trying OpenRouter API with model: {model}")
                 log.info(f"📝 Sending {len(messages)} messages to OpenRouter")
@@ -88,7 +88,7 @@ class OpenRouterAI:
                 log.error(f"❌ Failed to call OpenRouter API with {model}: {e}")
                 continue
         
-        log.error("❌ All Qwen models failed or were rate limited")
+        log.error("❌ All models failed or were rate limited")
         return None
 
 class EnhancedAISystem:
@@ -114,8 +114,8 @@ class EnhancedAISystem:
                 if not any(test_keyword in user_input_lower for test_keyword in ['status', 'response', 'failed', 'error', 'ms', 'code', 'http', 'api', 'get', 'post', 'url']):
                     return self._get_greeting_response()
             
-            # Create comprehensive system prompt for Qwen3
-            system_prompt = """You are Restaceratops, an advanced AI-powered API testing assistant built with the Qwen3 Coder model. Your core purpose is to provide expert-level guidance for API testing and development.
+            # Create comprehensive system prompt for Meta Llama
+            system_prompt = """You are Restaceratops, an advanced AI-powered API testing assistant built with the Meta Llama model. Your core purpose is to provide expert-level guidance for API testing and development.
 
 ## Your Capabilities:
 1. **API Testing Strategy**: Design comprehensive testing strategies for REST APIs, GraphQL, and microservices
@@ -181,7 +181,7 @@ Remember: You're helping users build robust, reliable APIs through comprehensive
         """Generate intelligent test cases using OpenRouter Qwen3 Coder."""
         try:
             # Create comprehensive test generation prompt
-            system_prompt = """You are an expert API testing engineer using the Qwen3 Coder model. Your task is to generate comprehensive, production-ready test cases for REST APIs.
+            system_prompt = """You are an expert API testing engineer using the Meta Llama model. Your task is to generate comprehensive, production-ready test cases for REST APIs.
 
 ## Test Generation Guidelines:
 1. **Coverage**: Include positive, negative, edge cases, and error scenarios
