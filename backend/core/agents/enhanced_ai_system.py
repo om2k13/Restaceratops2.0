@@ -38,16 +38,13 @@ class OpenRouterAI:
             log.warning("⚠️ No OpenRouter API key provided")
             return None
         
-        # Try different Qwen models in order of preference (including Turbo variants)
+        # Try different Qwen models in order of preference (only valid models)
         qwen_models = [
-            "qwen/qwen3-coder:free",
             "qwen/qwen3-coder:7b",
             "qwen/qwen3-coder:14b",
             "qwen/qwen3-coder:32b",
             "qwen/qwen2.5-7b-instruct",
-            "qwen/qwen2.5-14b-instruct",
-            "qwen/qwen2.5-turbo",
-            "qwen/qwen2.5-72b-instruct"
+            "qwen/qwen2.5-14b-instruct"
         ]
         
         for model in qwen_models:
@@ -66,7 +63,7 @@ class OpenRouterAI:
                             "model": model,
                             "messages": messages,
                             "temperature": 0.7,
-                            "max_tokens": 2000
+                            "max_tokens": 1000
                         }
                     )
                     
@@ -111,7 +108,8 @@ class EnhancedAISystem:
             user_input_lower = user_input.lower().strip()
             
             # Only use template responses for very specific cases
-            if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']):
+            greeting_keywords = ['hi', 'hello', 'hey', 'how are you', 'how r u', 'how do you do', 'good morning', 'good afternoon', 'good evening', 'sup', 'whats up']
+            if any(greeting in user_input_lower for greeting in greeting_keywords):
                 # Check if it's a simple greeting without test-related content
                 if not any(test_keyword in user_input_lower for test_keyword in ['status', 'response', 'failed', 'error', 'ms', 'code', 'http', 'api', 'get', 'post', 'url']):
                     return self._get_greeting_response()
@@ -261,14 +259,21 @@ How can I assist you with API testing today?"""
         """Get intelligent fallback response using logic-based analysis."""
         user_input_lower = user_input.lower()
         
-        # Analyze user input and provide intelligent responses
-        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'hey']):
+        # Check for test results patterns first (highest priority)
+        if any(pattern in user_input for pattern in ['Test Results Summary', 'Status: completed', 'Success Rate:', 'Failed Tests:', 'All Results:', 'Expected status', 'got 401', 'got 403', 'got 404', 'got 500']):
+            return self._analyze_test_results(user_input)
+        
+        # Check for greetings and casual conversation (second priority)
+        greeting_keywords = ['hi', 'hello', 'hey', 'how are you', 'how r u', 'how do you do', 'good morning', 'good afternoon', 'good evening', 'sup', 'whats up']
+        if any(greeting in user_input_lower for greeting in greeting_keywords):
             return self._get_greeting_response()
+        
+        # Analyze user input and provide intelligent responses
         elif "authentication" in user_input_lower or "auth" in user_input_lower:
             return self._get_authentication_guidance(user_input)
         elif "test" in user_input_lower and "api" in user_input_lower:
             return self._get_api_testing_guidance(user_input)
-        elif "error" in user_input_lower or "debug" in user_input_lower:
+        elif "error" in user_input_lower or "debug" in user_input_lower or "debbug" in user_input_lower:
             return self._get_debugging_guidance(user_input)
         elif "performance" in user_input_lower or "speed" in user_input_lower:
             return self._get_performance_guidance(user_input)
@@ -657,9 +662,20 @@ Ready to generate tests for your API?"""
         status_codes = []
         errors = []
         urls = []
+        test_file = ""
+        success_rate = ""
         
         for line in lines:
             line_lower = line.lower()
+            
+            # Extract test file name
+            if 'test file:' in line_lower:
+                test_file = line.split('Test File:')[1].strip() if 'Test File:' in line else ""
+            
+            # Extract success rate
+            if 'success rate:' in line_lower:
+                success_rate = line.split('Success Rate:')[1].strip() if 'Success Rate:' in line else ""
+            
             # Extract status codes (look for patterns like "403", "500", "got 403", etc.)
             if any(char.isdigit() for char in line):
                 # Look for status codes in various formats
@@ -690,13 +706,147 @@ Ready to generate tests for your API?"""
             error_analysis = self._analyze_errors(errors)
         else:
             error_analysis = ""
-            
-        return f"""🔍 **Test Results Analysis**
+        
+        # Create specific analysis based on the test results
+        analysis_header = f"""🔍 **Test Results Analysis**
+
+**Test File:** {test_file}
+**Success Rate:** {success_rate}
 
 I've analyzed your test results and found the following issues:
 
 {status_analysis}
-{error_analysis}
+{error_analysis}"""
+        
+        # Provide specific solutions based on status codes found
+        if '401' in status_codes:
+            return f"""{analysis_header}
+
+**🔐 Authentication Issue Detected (401 Unauthorized)**
+
+Your API is returning 401 Unauthorized, which means authentication is required but not provided or invalid.
+
+**Immediate Solutions:**
+
+1. **Add Authentication Headers:**
+   ```yaml
+   - name: "Get Users List with Auth"
+     request:
+       method: GET
+       url: "YOUR_API_URL/users"
+       headers:
+         Authorization: "Bearer YOUR_ACCESS_TOKEN"
+         Content-Type: "application/json"
+     expect:
+       status: 200
+   ```
+
+2. **Check Authentication Method:**
+   - **Bearer Token**: Add `Authorization: Bearer YOUR_TOKEN`
+   - **API Key**: Add `X-API-Key: YOUR_API_KEY`
+   - **Basic Auth**: Add `Authorization: Basic base64(username:password)`
+
+3. **Debug Steps:**
+   ```bash
+   # Test with curl to verify authentication
+   curl -X GET "YOUR_API_URL/users" \\
+        -H "Authorization: Bearer YOUR_TOKEN" \\
+        -H "Content-Type: application/json"
+   
+   # Check if endpoint requires authentication
+   curl -I "YOUR_API_URL/users"
+   ```
+
+4. **Common Authentication Issues:**
+   - Missing or expired access token
+   - Incorrect API key format
+   - Wrong authentication method
+   - Token not included in headers
+
+**Next Steps:**
+1. Check your API documentation for authentication requirements
+2. Verify your access token is valid and not expired
+3. Test the endpoint manually with curl first
+4. Update your test case with proper authentication headers
+
+Would you like me to help you create a specific test case with authentication for your API?"""
+        
+        elif '403' in status_codes:
+            return f"""{analysis_header}
+
+**🚫 Authorization Issue Detected (403 Forbidden)**
+
+Your API is returning 403 Forbidden, which means the request is authenticated but the user doesn't have permission.
+
+**Solutions:**
+
+1. **Check User Permissions:**
+   - Verify the authenticated user has the required role
+   - Check if the endpoint requires specific permissions
+   - Test with a user account that has proper access
+
+2. **Test with Different Users:**
+   ```yaml
+   - name: "Test with Admin User"
+     request:
+       method: GET
+       url: "YOUR_API_URL/users"
+       headers:
+         Authorization: "Bearer ADMIN_TOKEN"
+     expect:
+       status: 200
+   ```
+
+3. **Debug Steps:**
+   ```bash
+   # Test with different user tokens
+   curl -X GET "YOUR_API_URL/users" \\
+        -H "Authorization: Bearer ADMIN_TOKEN"
+   ```
+
+**Next Steps:**
+1. Check user roles and permissions
+2. Test with an admin or privileged user account
+3. Verify the endpoint access requirements
+4. Contact API administrator if needed"""
+        
+        elif '404' in status_codes:
+            return f"""{analysis_header}
+
+**🔍 Endpoint Not Found (404)**
+
+Your API is returning 404 Not Found, which means the endpoint URL is incorrect.
+
+**Solutions:**
+
+1. **Verify the URL:**
+   - Check the API documentation for correct endpoints
+   - Ensure the base URL is correct
+   - Verify the endpoint path is accurate
+
+2. **Common URL Issues:**
+   - Wrong base URL (http vs https)
+   - Missing or extra slashes
+   - Incorrect API version in path
+   - Wrong endpoint name
+
+3. **Debug Steps:**
+   ```bash
+   # Test the base URL first
+   curl -I "YOUR_API_BASE_URL"
+   
+   # Test the specific endpoint
+   curl -X GET "YOUR_API_URL/users"
+   ```
+
+**Next Steps:**
+1. Check API documentation for correct endpoints
+2. Verify the base URL and path
+3. Test with a known working endpoint first
+4. Update your test case with the correct URL"""
+        
+        else:
+            return f"""{analysis_header}
 
 **Recommended Solutions:**
 

@@ -20,6 +20,7 @@ const CleanDashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadDashboardStats();
@@ -224,18 +225,43 @@ const CleanDashboard: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {stats.recent_results.slice(0, 5).map((result, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{result.test_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        result.status === 'passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {result.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.response_time}ms</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.response_code}</td>
-                  </tr>
+                  <React.Fragment key={index}>
+                    <tr
+                      className="cursor-pointer hover:bg-blue-50"
+                      onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{result.test_name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          result.status === 'passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {result.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.response_time}ms</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.response_code}</td>
+                    </tr>
+                    {expandedIndex === index && (
+                      <tr>
+                        <td colSpan={4} className="bg-gray-50 px-6 py-4 border-t">
+                          <div className="text-sm text-gray-700">
+                            <div className="mb-2">
+                              <strong>Response Body:</strong>
+                              <pre className="bg-gray-100 rounded p-2 mt-1 overflow-x-auto text-xs max-h-48">{result.response_body || 'No response body.'}</pre>
+                            </div>
+                            {result.error && (
+                              <div className="mb-2">
+                                <strong>Error:</strong> <span className="text-red-600">{result.error}</span>
+                              </div>
+                            )}
+                            <div className="mb-2">
+                              <strong>Timestamp:</strong> {result.timestamp}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

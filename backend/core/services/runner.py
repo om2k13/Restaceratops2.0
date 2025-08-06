@@ -481,7 +481,10 @@ async def run_suite(test_file: str, **kwargs) -> Dict[str, Any]:
             raise FileNotFoundError(f"Test file not found: {test_file}. Checked paths: {[str(p) for p in possible_paths]}")
         
         with open(path, 'r') as f:
-            test_data = yaml.safe_load(f)
+            content = f.read()
+            if not content.strip():
+                raise ValueError(f"Test file is empty: {path}")
+            test_data = yaml.safe_load(content)
         
         # Handle both formats: direct list or wrapped in 'tests' key
         if isinstance(test_data, dict) and 'tests' in test_data:

@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 import tempfile
 import shutil
+import uuid
 from pathlib import Path
 
 # Import core services
@@ -148,19 +149,35 @@ async def upload_file(file: UploadFile = File(...)):
         if not file.filename.endswith(('.yml', '.yaml')):
             raise HTTPException(status_code=400, detail="Only YAML files are supported")
         
-        # Create unique filename
-        file_path = UPLOADS_DIR / f"{file.filename}"
+        # Create unique filename with timestamp and UUID to prevent overwrites
+        file_extension = Path(file.filename).suffix
+        file_name_without_ext = Path(file.filename).stem
+        unique_filename = f"{file_name_without_ext}_{uuid.uuid4().hex[:8]}{file_extension}"
+        file_path = UPLOADS_DIR / unique_filename
         
-        # Save uploaded file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Save uploaded file with proper error handling
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Verify file was written correctly by reading it back
+            with open(file_path, "rb") as verify_buffer:
+                verify_content = verify_buffer.read()
+                if len(verify_content) == 0:
+                    raise Exception("Uploaded file is empty")
+                    
+        except Exception as upload_error:
+            # Clean up the file if it was partially written
+            if file_path.exists():
+                file_path.unlink()
+            raise upload_error
         
-        log.info(f"File uploaded: {file_path}")
+        log.info(f"File uploaded successfully: {file_path} (size: {file_path.stat().st_size} bytes)")
         
         return {
             "status": "success",
             "message": "File uploaded successfully",
-            "filename": file.filename,
+            "filename": unique_filename,
             "file_path": str(file_path)
         }
     except Exception as e:
@@ -433,20 +450,35 @@ async def import_postman_collection(file: UploadFile = File(...)):
         # Generate YAML test file
         yaml_content = postman_parser.generate_yaml(collection_data)
         
-        # Save the generated YAML file
-        filename = f"postman_import_{collection_data['name'].replace(' ', '_').lower()}.yml"
-        file_path = UPLOADS_DIR / filename
+        # Save the generated YAML file with unique filename
+        base_filename = f"postman_import_{collection_data['name'].replace(' ', '_').lower()}"
+        unique_filename = f"{base_filename}_{uuid.uuid4().hex[:8]}.yml"
+        file_path = UPLOADS_DIR / unique_filename
         
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(yaml_content)
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(yaml_content)
+            
+            # Verify file was written correctly
+            with open(file_path, 'r', encoding='utf-8') as verify_f:
+                verify_content = verify_f.read()
+                if len(verify_content.strip()) == 0:
+                    raise Exception("Generated YAML file is empty")
+                    
+        except Exception as write_error:
+            # Clean up the file if it was partially written
+            if file_path.exists():
+                file_path.unlink()
+            raise write_error
         
         log.info(f"Successfully imported Postman collection: {collection_data['name']}")
         log.info(f"Generated {len(collection_data['test_cases'])} test cases")
+        log.info(f"Postman import file saved: {file_path} (size: {file_path.stat().st_size} bytes)")
         
         return {
             "status": "success",
             "message": f"Successfully imported Postman collection: {collection_data['name']}",
-            "filename": filename,
+            "filename": unique_filename,
             "file_path": str(file_path),
             "collection_info": {
                 "name": collection_data['name'],

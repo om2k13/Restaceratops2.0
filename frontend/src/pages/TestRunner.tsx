@@ -27,6 +27,8 @@ interface TestExecutionResult {
 const CleanTestRunner: React.FC = () => {
   const [testFile, setTestFile] = useState('tests/simple_test.yml');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [postmanFile, setPostmanFile] = useState<File | null>(null);
+  const [importedCollection, setImportedCollection] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<TestExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +36,9 @@ const CleanTestRunner: React.FC = () => {
   const [singleUrl, setSingleUrl] = useState('');
   const [singleUrlMethod, setSingleUrlMethod] = useState('GET');
   const [useSingleUrl, setUseSingleUrl] = useState(false);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   const availableTestFiles = [
-    'backend/tests/simple_test.yml',
-    'backend/tests/comprehensive_test.yml',
-    'backend/tests/real-world-example.yml',
-    'backend/tests/production_ready.yml',
-    'backend/tests/advanced_features.yml',
-    'backend/tests/my-api-example.yml',
-    'backend/tests/custom-test-example.yml',
-    'backend/tests/sample-api-tests.yml',
     'tests/simple_test.yml',
     'tests/comprehensive_test.yml',
     'tests/real-world-example.yml',
@@ -173,11 +168,38 @@ const CleanTestRunner: React.FC = () => {
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUnifiedFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
+    if (!file) return;
+    setError('');
+    setImportedCollection(null);
+    setUploadedFile(null);
+    setPostmanFile(null);
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'json') {
+      // Try to parse as Postman collection
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        if (json.info && json.item) {
+          // Looks like a Postman collection
+          setPostmanFile(file);
+          try {
+            const result = await apiService.importPostmanCollection(file);
+            setImportedCollection(result.collection_info);
+            setTestFile(result.filename); // Use the generated YAML file
+          } catch (err) {
+            setError('Failed to import Postman collection: ' + err);
+          }
+          return;
+        }
+      } catch (err) {
+        // Not a valid JSON or not a Postman collection, treat as normal file
+      }
     }
+    // Otherwise, treat as YAML test file
+    setUploadedFile(file);
   };
 
   const handleTestFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -374,21 +396,24 @@ ${results.results.map(r => `- ${r.test_name}: ${r.status} (${r.response_code}) -
              )}
            </div>
           
+          {/* Unified File Upload Section */}
           <div className="border-t pt-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Or Upload Custom Test File
+              Upload Test File or Postman Collection (.yml, .yaml, .json)
             </label>
             <div className="flex items-center space-x-4">
               <input
                 type="file"
-                accept=".yml,.yaml"
-                onChange={handleFileUpload}
+                accept=".yml,.yaml,.json"
+                onChange={handleUnifiedFileUpload}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
-              {uploadedFile && (
+              {(uploadedFile || postmanFile) && (
                 <button
                   onClick={() => {
                     setUploadedFile(null);
+                    setPostmanFile(null);
+                    setImportedCollection(null);
                     setTestFile('tests/simple_test.yml');
                   }}
                   className="px-3 py-2 text-sm text-red-600 hover:text-red-800"
@@ -402,6 +427,22 @@ ${results.results.map(r => `- ${r.test_name}: ${r.status} (${r.response_code}) -
                 ✅ Using uploaded file: {uploadedFile.name}
               </p>
             )}
+            {postmanFile && importedCollection && (
+              <div className="mt-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <h4 className="font-medium text-orange-800 mb-2">
+                  ✅ Collection Imported: {importedCollection.name}
+                </h4>
+                <div className="text-sm text-orange-700 space-y-1">
+                  <p>📝 Description: {importedCollection.description || 'No description'}</p>
+                  <p>🧪 Test Cases: {importedCollection.total_test_cases}</p>
+                  <p>🔧 Variables: {importedCollection.variables}</p>
+                  <p>📄 Generated File: {testFile}</p>
+                </div>
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              💡 Upload a YAML test file or export your Postman collection as JSON and import it here to automatically generate test cases!
+            </p>
           </div>
 
           <button
@@ -508,31 +549,56 @@ ${results.results.map(r => `- ${r.test_name}: ${r.status} (${r.response_code}) -
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {results.results.map((result, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {result.test_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            result.status === 'passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {result.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {result.response_time}ms
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {result.response_code}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {result.error ? (
-                            <span className="text-red-600">{result.error}</span>
-                          ) : (
-                            <span className="text-green-600">Success</span>
-                          )}
-                        </td>
-                      </tr>
+                      <React.Fragment key={index}>
+                        <tr
+                          className="cursor-pointer hover:bg-blue-50"
+                          onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {result.test_name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              result.status === 'passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {result.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {result.response_time}ms
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {result.response_code}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            {result.error ? (
+                              <span className="text-red-600">{result.error}</span>
+                            ) : (
+                              <span className="text-green-600">Success</span>
+                            )}
+                          </td>
+                        </tr>
+                        {expandedIndex === index && (
+                          <tr>
+                            <td colSpan={5} className="bg-gray-50 px-6 py-4 border-t">
+                              <div className="text-sm text-gray-700">
+                                <div className="mb-2">
+                                  <strong>Response Body:</strong>
+                                  <pre className="bg-gray-100 rounded p-2 mt-1 overflow-x-auto text-xs max-h-48">{result.response_body || 'No response body.'}</pre>
+                                </div>
+                                {result.error && (
+                                  <div className="mb-2">
+                                    <strong>Error:</strong> <span className="text-red-600">{result.error}</span>
+                                  </div>
+                                )}
+                                <div className="mb-2">
+                                  <strong>Timestamp:</strong> {result.timestamp}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

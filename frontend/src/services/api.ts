@@ -72,7 +72,7 @@ class ApiService {
   constructor(baseUrl: string = API_BASE_URL) {
     this.axiosInstance = axios.create({
       baseURL: baseUrl,
-      timeout: 30000,
+      timeout: 120000, // Increased to 2 minutes for AI processing
       headers: {
         'Content-Type': 'application/json',
       },
@@ -186,6 +186,38 @@ class ApiService {
 
     try {
       const response = await this.axiosInstance.post('/api/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(errorMessage);
+      }
+      throw error;
+    }
+  }
+
+  async importPostmanCollection(file: File): Promise<{
+    status: string;
+    message: string;
+    filename: string;
+    file_path: string;
+    collection_info: {
+      name: string;
+      description: string;
+      total_test_cases: number;
+      variables: number;
+      test_cases: any[];
+    };
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await this.axiosInstance.post('/api/import/postman', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
