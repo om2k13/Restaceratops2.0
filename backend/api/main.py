@@ -8,6 +8,10 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -319,7 +323,8 @@ async def chat_endpoint(request: ChatRequest):
         return {
             "response": response,
             "timestamp": asyncio.get_event_loop().time(),
-            "ai_model": "qwen/qwen3-coder:free"
+            "ai_model": ai_system.openrouter_ai.model,
+            "provider": "OpenRouter"
         }
     except Exception as e:
         log.error(f"Chat request failed: {e}")
